@@ -274,3 +274,29 @@ erDiagram
         datetime Changed_At
     }
 ```
+
+## Google Apps Script Backend Functions
+
+`Code.gs` exposes the initial backend operations for the web app. Each CRUD function returns a standard response object:
+
+```javascript
+{
+  status: 'success' | 'error',
+  data: {},
+  message: ''
+}
+```
+
+### Web App Entry Point
+
+- `doGet(e)` renders the `Index.html` interface with `HtmlService.createTemplateFromFile()`.
+
+### CRUD API
+
+- `createRecord(sheetKey, record)` creates a new row, auto-generates the sheet-specific primary key when omitted, sets `Created At` and `Updated At` when those headers exist, and rejects duplicate IDs.
+- `readRecords(sheetKey, options)` reads rows with optional `id`, exact-match `filters`, `offset`, and `limit` options.
+- `getRecordById(sheetKey, id)` reads one row by the sheet's configured primary key.
+- `updateRecord(sheetKey, id, updates)` updates an existing row by ID and refreshes `Updated At` when the header exists.
+- `deleteRecord(sheetKey, id)` deletes an existing row by ID.
+
+Use the keys from `SHEET_NAMES` when calling these functions, for example `CLIENTS`, `DEALS`, or `DEAL_LINE_ITEMS`.
