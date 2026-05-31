@@ -50,6 +50,19 @@
     <main class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
       <div id="alert" class="mb-6 hidden rounded-xl border px-4 py-3 text-sm" role="alert"></div>
 
+      <section class="mb-8 grid gap-4 md:grid-cols-2" aria-label="Sales dashboard">
+        <article class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <p class="text-sm font-semibold uppercase tracking-wide text-slate-500">Total Expected Revenue</p>
+          <p id="dashboardExpectedRevenue" class="mt-3 text-4xl font-bold tracking-tight text-slate-950">$0</p>
+          <p class="mt-2 text-sm text-slate-600">Sum of Expected Revenue for the currently loaded pipeline.</p>
+        </article>
+        <article class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <p class="text-sm font-semibold uppercase tracking-wide text-slate-500">Closed-Won Deals</p>
+          <p id="dashboardClosedWonDeals" class="mt-3 text-4xl font-bold tracking-tight text-emerald-600">0</p>
+          <p class="mt-2 text-sm text-slate-600">Number of deals currently marked as Closed Won.</p>
+        </article>
+      </section>
+
       <section class="grid gap-8 xl:grid-cols-[420px_1fr]">
         <article class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div class="mb-6">
@@ -204,9 +217,23 @@
 
         <article class="rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div class="flex flex-col gap-4 border-b border-slate-200 p-6 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h2 class="text-xl font-bold text-slate-950">Current Pipeline</h2>
-              <p id="pipelineSummary" class="mt-1 text-sm text-slate-600">Pipeline data will load automatically.</p>
+            <div class="space-y-4">
+              <div>
+                <h2 class="text-xl font-bold text-slate-950">Current Pipeline</h2>
+                <p id="pipelineSummary" class="mt-1 text-sm text-slate-600">Pipeline data will load automatically.</p>
+              </div>
+              <div class="grid gap-3 lg:grid-cols-[180px_1fr]">
+                <div>
+                  <label for="stageFilter" class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Filter by Stage</label>
+                  <select id="stageFilter" class="mt-2 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-matchpoint-600 focus:outline-none focus:ring-1 focus:ring-matchpoint-600">
+                    <option value="">All stages</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="clientSearch" class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Search Client Name</label>
+                  <input id="clientSearch" type="search" placeholder="Type a client name..." class="mt-2 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-matchpoint-600 focus:outline-none focus:ring-1 focus:ring-matchpoint-600">
+                </div>
+              </div>
             </div>
             <div class="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
               <div class="rounded-xl bg-slate-50 px-4 py-3">
@@ -274,10 +301,17 @@
       const dealCount = document.getElementById('dealCount');
       const expectedTotal = document.getElementById('expectedTotal');
       const weightedTotal = document.getElementById('weightedTotal');
+      const dashboardExpectedRevenue = document.getElementById('dashboardExpectedRevenue');
+      const dashboardClosedWonDeals = document.getElementById('dashboardClosedWonDeals');
+      const stageFilter = document.getElementById('stageFilter');
+      const clientSearch = document.getElementById('clientSearch');
+      let pipelineRecords = [];
 
       document.addEventListener('DOMContentLoaded', () => {
         dealForm.addEventListener('submit', handleDealSubmit);
         refreshButton.addEventListener('click', loadPipeline);
+        stageFilter.addEventListener('change', applyPipelineFilters);
+        clientSearch.addEventListener('input', applyPipelineFilters);
         loadPipeline();
       });
 
@@ -321,15 +355,20 @@
         setLoading(true, 'Loading pipeline...');
         refreshButton.disabled = true;
 
-        return runGas('readRecords', DEAL_SHEET_KEY, {})
+        return runGas('getPipelineDashboardData')
           .then((response) => {
             assertSuccess(response);
-            const records = response.data && Array.isArray(response.data.records)
+            pipelineRecords = response.data && Array.isArray(response.data.records)
               ? response.data.records
               : [];
-            renderPipeline(records);
+            renderDashboard(response.data && response.data.metrics);
+            renderStageOptions(response.data && response.data.stages);
+            applyPipelineFilters();
           })
           .catch((error) => {
+            pipelineRecords = [];
+            renderDashboard({ totalExpectedRevenue: 0, closedWonDeals: 0 });
+            renderStageOptions([]);
             renderPipeline([]);
             showAlert('error', error.message || 'Unable to load pipeline.');
           })
@@ -372,6 +411,40 @@
         );
       }
 
+      function renderDashboard(metrics) {
+        const safeMetrics = metrics || {};
+        dashboardExpectedRevenue.textContent = formatCurrency(safeMetrics.totalExpectedRevenue || 0);
+        dashboardClosedWonDeals.textContent = String(safeMetrics.closedWonDeals || 0);
+      }
+
+      function renderStageOptions(stages) {
+        const selectedStage = stageFilter.value;
+        const allStages = Array.isArray(stages) && stages.length
+          ? stages
+          : Array.from(new Set(pipelineRecords.map((record) => record['Deal Stage']).filter(Boolean))).sort();
+
+        stageFilter.innerHTML = '<option value="">All stages</option>' + allStages.map((stage) => {
+          return `<option value="${escapeHtml(stage)}">${escapeHtml(stage)}</option>`;
+        }).join('');
+
+        if (allStages.includes(selectedStage)) {
+          stageFilter.value = selectedStage;
+        }
+      }
+
+      function applyPipelineFilters() {
+        const selectedStage = stageFilter.value;
+        const searchTerm = clientSearch.value.trim().toLowerCase();
+        const filteredRecords = pipelineRecords.filter((record) => {
+          const stageMatches = !selectedStage || record['Deal Stage'] === selectedStage;
+          const clientName = String(record['Client Name'] || '').toLowerCase();
+          const clientMatches = !searchTerm || clientName.includes(searchTerm);
+          return stageMatches && clientMatches;
+        });
+
+        renderPipeline(filteredRecords);
+      }
+
       function renderPipeline(records) {
         const sortedRecords = [...records].sort((first, second) => {
           return new Date(first['Expected Close Date'] || '9999-12-31') - new Date(second['Expected Close Date'] || '9999-12-31');
@@ -391,12 +464,15 @@
         dealCount.textContent = String(sortedRecords.length);
         expectedTotal.textContent = formatCurrency(totals.expected);
         weightedTotal.textContent = formatCurrency(totals.weighted);
+        const filtersActive = Boolean(stageFilter.value || clientSearch.value.trim());
         pipelineSummary.textContent = sortedRecords.length
-          ? `Showing ${sortedRecords.length} deal${sortedRecords.length === 1 ? '' : 's'} sorted by expected close date.`
-          : 'No deals found. Add your first opportunity with the form.';
+          ? `Showing ${sortedRecords.length} deal${sortedRecords.length === 1 ? '' : 's'}${filtersActive ? ' matching the current filters' : ''}, sorted by expected close date.`
+          : filtersActive
+            ? 'No deals match the selected filters.'
+            : 'No deals found. Add your first opportunity with the form.';
 
         if (!sortedRecords.length) {
-          pipelineTableBody.innerHTML = '<tr><td colspan="8" class="px-4 py-10 text-center text-slate-500">No pipeline deals yet.</td></tr>';
+          pipelineTableBody.innerHTML = `<tr><td colspan="8" class="px-4 py-10 text-center text-slate-500">${filtersActive ? 'No deals match the selected filters.' : 'No pipeline deals yet.'}</td></tr>`;
           return;
         }
 
@@ -412,7 +488,10 @@
                 <div class="font-semibold text-slate-950">${escapeHtml(record['Deal Name'] || 'Untitled Deal')}</div>
                 <div class="mt-1 text-xs text-slate-500">${escapeHtml(record['Deal ID'] || '')}</div>
               </td>
-              <td class="whitespace-nowrap px-4 py-4 text-slate-700">${escapeHtml(record['Client ID'] || '-')}</td>
+              <td class="whitespace-nowrap px-4 py-4 text-slate-700">
+                <div class="font-medium text-slate-900">${escapeHtml(record['Client Name'] || 'Unknown Client')}</div>
+                <div class="mt-1 text-xs text-slate-500">${escapeHtml(record['Client ID'] || '-')}</div>
+              </td>
               <td class="whitespace-nowrap px-4 py-4 text-slate-700">${escapeHtml(record['Product Category'] || '-')}</td>
               <td class="whitespace-nowrap px-4 py-4">${stageBadge(record['Deal Stage'])}</td>
               <td class="whitespace-nowrap px-4 py-4 text-right font-medium text-slate-900">${formatCurrency(expected)}</td>

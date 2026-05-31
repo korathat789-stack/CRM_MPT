@@ -184,6 +184,55 @@ function readRecords(sheetKey, options) {
   }
 }
 
+
+/**
+ * Reads deal pipeline records enriched with client names and dashboard metrics.
+ *
+ * @return {Object} Standard JSON response with deals, stage options, and metrics.
+ */
+function getPipelineDashboardData() {
+  try {
+    const dealContext = getSheetContext_('DEALS');
+    const clientContext = getSheetContext_('CLIENTS');
+    const clientNameById = getSheetRecords_(clientContext).reduce((lookup, client) => {
+      lookup[String(client['Client ID'])] = client['Client Name'] || '';
+      return lookup;
+    }, {});
+
+    const deals = getSheetRecords_(dealContext).map((deal) => {
+      const enrichedDeal = Object.assign({}, deal);
+      enrichedDeal['Client Name'] = clientNameById[String(deal['Client ID'])] || '';
+      return enrichedDeal;
+    });
+
+    const metrics = deals.reduce((summary, deal) => {
+      summary.totalExpectedRevenue += coerceNumber_(deal['Expected Revenue']);
+
+      if (String(deal['Deal Stage']).toLowerCase() === 'closed won') {
+        summary.closedWonDeals += 1;
+      }
+
+      return summary;
+    }, {
+      totalExpectedRevenue: 0,
+      closedWonDeals: 0,
+    });
+
+    const stages = Array.from(new Set(deals
+      .map((deal) => deal['Deal Stage'])
+      .filter((stage) => stage !== '' && stage !== null && stage !== undefined)))
+      .sort();
+
+    return createJsonResponse_({
+      records: deals,
+      metrics,
+      stages,
+    });
+  } catch (error) {
+    return createJsonResponse_(null, error);
+  }
+}
+
 /**
  * Reads a single row by primary-key value.
  *
@@ -536,6 +585,22 @@ function filterRecords_(records, filters) {
       return String(record[fieldName]) === String(filters[fieldName]);
     });
   });
+}
+
+
+/**
+ * Converts numeric-like sheet values into a finite number.
+ *
+ * @param {*} value Sheet or payload value.
+ * @return {number} Parsed number or 0.
+ */
+function coerceNumber_(value) {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  const parsedValue = Number(String(value || '').replace(/[^0-9.-]/g, ''));
+  return Number.isFinite(parsedValue) ? parsedValue : 0;
 }
 
 /**

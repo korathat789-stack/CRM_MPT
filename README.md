@@ -298,5 +298,6 @@ erDiagram
 - `getRecordById(sheetKey, id)` reads one row by the sheet's configured primary key.
 - `updateRecord(sheetKey, id, updates)` updates an existing row by ID and refreshes `Updated At` when the header exists.
 - `deleteRecord(sheetKey, id)` deletes an existing row by ID.
+- `getPipelineDashboardData()` returns Deals enriched with `Client Name`, a sorted list of deal stages for filtering, and dashboard metrics for total expected revenue and closed-won deal count.
 
 Use the keys from `SHEET_NAMES` when calling these functions, for example `CLIENTS`, `DEALS`, or `DEAL_LINE_ITEMS`.
