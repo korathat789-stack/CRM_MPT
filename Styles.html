@@ -1,0 +1,259 @@
+<style>
+  :root {
+    --navy: #0f172a;
+    --line: #e2e8f0;
+    --muted: #64748b;
+    --blue: #2563eb;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: #f8fafc;
+    color: #0f172a;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    letter-spacing: 0;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+
+  .app-shell {
+    min-height: 100vh;
+    display: grid;
+    grid-template-columns: 264px minmax(0, 1fr);
+  }
+
+  .sidebar {
+    background: var(--navy);
+    color: #e2e8f0;
+    min-height: 100vh;
+    position: sticky;
+    top: 0;
+  }
+
+  .nav-button {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    width: 100%;
+    min-height: 40px;
+    padding: 0.625rem 0.75rem;
+    color: #cbd5e1;
+    border-radius: 8px;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+
+  .nav-button:hover,
+  .nav-button.active {
+    background: #1e293b;
+    color: #ffffff;
+  }
+
+  .panel {
+    background: #ffffff;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 38px;
+    padding: 0.5rem 0.875rem;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    font-weight: 600;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  }
+
+  .btn-primary {
+    background: var(--blue);
+    color: #ffffff;
+  }
+
+  .btn-primary:hover {
+    background: #1d4ed8;
+  }
+
+  .btn-secondary {
+    background: #ffffff;
+    color: #0f172a;
+    border-color: var(--line);
+  }
+
+  .btn-secondary:hover {
+    background: #f1f5f9;
+  }
+
+  .btn-danger {
+    background: #dc2626;
+    color: #ffffff;
+  }
+
+  .btn-danger:hover {
+    background: #b91c1c;
+  }
+
+  .icon-btn {
+    width: 38px;
+    height: 38px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: #ffffff;
+    color: #334155;
+  }
+
+  .icon-btn:hover {
+    background: #f1f5f9;
+  }
+
+  .field {
+    width: 100%;
+    min-height: 38px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #ffffff;
+    padding: 0.5rem 0.75rem;
+    outline: none;
+  }
+
+  .field:focus {
+    border-color: var(--blue);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  }
+
+  .field-error {
+    border-color: #dc2626;
+  }
+
+  .label {
+    display: block;
+    margin-bottom: 0.375rem;
+    color: #334155;
+    font-size: 0.8125rem;
+    font-weight: 700;
+  }
+
+  .error-text {
+    margin-top: 0.25rem;
+    color: #dc2626;
+    font-size: 0.8125rem;
+  }
+
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    padding: 0.125rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+
+  th {
+    background: #f8fafc;
+    color: #475569;
+    font-size: 0.75rem;
+    font-weight: 800;
+    text-align: left;
+    text-transform: uppercase;
+  }
+
+  th,
+  td {
+    padding: 0.75rem;
+    border-bottom: 1px solid var(--line);
+    vertical-align: middle;
+  }
+
+  tr:last-child td {
+    border-bottom: 0;
+  }
+
+  .chart-box {
+    position: relative;
+    min-height: 280px;
+  }
+
+  .toast {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    z-index: 60;
+    max-width: min(420px, calc(100vw - 2rem));
+    border-radius: 8px;
+    box-shadow: 0 18px 45px rgba(15, 23, 42, 0.18);
+  }
+
+  .spinner {
+    width: 1.25rem;
+    height: 1.25rem;
+    border: 3px solid #bfdbfe;
+    border-top-color: #2563eb;
+    border-radius: 999px;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @media (max-width: 900px) {
+    .app-shell {
+      display: block;
+      padding-bottom: 72px;
+    }
+
+    .sidebar {
+      position: fixed;
+      inset: 0 auto 0 0;
+      width: min(82vw, 300px);
+      z-index: 50;
+      transform: translateX(-100%);
+      transition: transform 0.18s ease;
+    }
+
+    .sidebar.open {
+      transform: translateX(0);
+    }
+
+    .mobile-scrim {
+      position: fixed;
+      inset: 0;
+      z-index: 40;
+      background: rgba(15, 23, 42, 0.45);
+    }
+
+    th,
+    td {
+      padding: 0.625rem;
+    }
+  }
+</style>
