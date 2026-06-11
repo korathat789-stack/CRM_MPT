@@ -3,7 +3,7 @@ var CRM_CONFIG = (function () {
     NAME: 'MATCHPOINT CRM',
     COMPANY_NAME: 'MATCHPOINT TECHNOLOGY CO., LTD.',
     DEFAULT_TIMEZONE: 'Asia/Bangkok',
-    FIRST_ADMIN_EMAIL: 'admin@matchpoint.co.th',
+    FIRST_ADMIN_EMAIL: 'korathat789@gmail.com',
     ALLOWED_DOMAIN: 'matchpoint.co.th'
   };
 
