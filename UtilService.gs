@@ -130,7 +130,7 @@ var UtilService = (function () {
     }
     return errorResponse(
       CRM_CONFIG.ERROR_CODES.UNKNOWN_ERROR,
-      'Unexpected error. Please contact an administrator.'
+      err && err.message ? err.message : 'Unexpected error. Please contact an administrator.'
     );
   }
 

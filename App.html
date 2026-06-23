@@ -1,36 +1,87 @@
 <script type="text/x-template" id="crm-template">
   <div>
-    <section v-if="accessDenied" class="min-h-screen flex items-center justify-center bg-slate-50 p-6">
-      <div class="panel max-w-lg w-full p-8 text-center">
-        <div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-50 text-red-600">
-          <i class="fa-solid fa-lock"></i>
+    <section v-if="!authChecked" class="min-h-screen bg-slate-50">
+      <div class="grid min-h-screen lg:grid-cols-[minmax(0,1fr)_460px]">
+        <div class="hidden bg-slate-950 p-10 text-white lg:flex lg:flex-col lg:justify-between">
+          <div class="flex items-center gap-3">
+            <div class="flex h-11 w-11 items-center justify-center rounded-lg bg-blue-600 text-lg font-black">MP</div>
+            <div>
+              <div class="text-sm font-black tracking-wide">MATCHPOINT CRM</div>
+              <div class="text-xs text-slate-400">MATCHPOINT TECHNOLOGY CO., LTD.</div>
+            </div>
+          </div>
+          <div>
+            <div class="text-sm font-bold uppercase text-blue-300">Sales Operations</div>
+            <h1 class="mt-4 max-w-3xl text-5xl font-black leading-tight">Pipeline, collections, and follow-up work in one Google Workspace CRM.</h1>
+          </div>
+          <div class="text-xs text-slate-500">Google Apps Script · Google Sheets · Google Drive</div>
         </div>
-        <h1 class="text-2xl font-bold text-slate-950">Access Denied</h1>
-        <p class="mt-3 text-slate-600">{{ accessDeniedMessage }}</p>
+
+        <div class="flex items-center justify-center p-6">
+          <div class="panel w-full max-w-md p-7">
+            <div class="mb-6">
+              <h1 class="text-2xl font-black text-slate-950">Sign in</h1>
+              <p class="mt-2 text-sm text-slate-600">MATCHPOINT CRM</p>
+            </div>
+            <form class="space-y-4" @submit.prevent="login">
+              <label>
+                <span class="label">Username</span>
+                <input v-model.trim="loginForm.username" class="field" autocomplete="username" type="text">
+              </label>
+              <label>
+                <span class="label">Password</span>
+                <input v-model="loginForm.password" class="field" autocomplete="current-password" type="password">
+              </label>
+              <button type="submit" class="btn btn-primary w-full" :disabled="loading">
+                <span v-if="loading" class="spinner border-blue-200 border-t-white"></span>
+                <i v-else class="fa-solid fa-right-to-bracket"></i>
+                Sign In
+              </button>
+            </form>
+
+            <div class="mt-6 border-t border-slate-200 pt-5">
+              <button type="button" class="btn btn-secondary w-full" @click="showSetup = !showSetup">
+                <i class="fa-solid fa-database"></i>
+                Database Setup
+              </button>
+              <form v-if="showSetup" class="mt-4 space-y-3" @submit.prevent="setupDatabase">
+                <label>
+                  <span class="label">Admin Email</span>
+                  <input v-model.trim="setupForm.email" class="field" type="email">
+                </label>
+                <label>
+                  <span class="label">Admin Username</span>
+                  <input v-model.trim="setupForm.username" class="field" type="text">
+                </label>
+                <label>
+                  <span class="label">Admin Password</span>
+                  <input v-model="setupForm.password" class="field" type="password">
+                </label>
+                <button type="submit" class="btn btn-primary w-full" :disabled="loading">
+                  <i class="fa-solid fa-wrench"></i>
+                  Initialize / Upgrade
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
 
     <section v-else class="app-shell">
       <div v-if="mobileMenuOpen" class="mobile-scrim lg:hidden" @click="mobileMenuOpen = false"></div>
-
       <aside :class="['sidebar', { open: mobileMenuOpen }]">
         <div class="p-5">
           <div class="flex items-center gap-3">
             <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600 text-white font-black">MP</div>
             <div class="min-w-0">
               <div class="truncate text-sm font-bold text-white">{{ settings.appName || 'MATCHPOINT CRM' }}</div>
-              <div class="truncate text-xs text-slate-400">{{ settings.companyName || 'MATCHPOINT TECHNOLOGY CO., LTD.' }}</div>
+              <div class="truncate text-xs text-slate-400">{{ auth.fullName || auth.email }}</div>
             </div>
           </div>
         </div>
-        <nav class="px-3 pb-4 space-y-1">
-          <button
-            v-for="item in navItems"
-            :key="item.page"
-            type="button"
-            :class="['nav-button', { active: currentPage === item.page }]"
-            @click="navigate(item.page)"
-          >
+        <nav class="max-h-[calc(100vh-88px)] overflow-y-auto px-3 pb-4 space-y-1">
+          <button v-for="item in navItems" :key="item.page" type="button" :class="['nav-button', { active: currentPage === item.page }]" @click="navigate(item.page)">
             <i :class="['fa-solid', item.icon, 'w-5 text-center']"></i>
             <span>{{ item.label }}</span>
           </button>
@@ -49,853 +100,650 @@
                 <p class="truncate text-xs text-slate-500">{{ settings.companyName }}</p>
               </div>
             </div>
-            <div class="flex min-w-0 items-center gap-2">
-              <div class="hidden min-w-0 text-right sm:block">
-                <div class="truncate text-sm font-bold text-slate-900">{{ auth.email }}</div>
-                <div class="text-xs text-slate-500">{{ auth.fullName || auth.department }}</div>
-              </div>
+            <div class="flex items-center gap-2">
               <span class="status-pill bg-blue-50 text-blue-700">{{ auth.role }}</span>
-              <button type="button" class="icon-btn" title="Refresh" @click="refreshCurrent">
-                <i class="fa-solid fa-rotate-right"></i>
-              </button>
+              <button type="button" class="icon-btn" title="Refresh" @click="refreshCurrent"><i class="fa-solid fa-rotate-right"></i></button>
+              <button type="button" class="icon-btn" title="Sign out" @click="logout"><i class="fa-solid fa-arrow-right-from-bracket"></i></button>
             </div>
           </div>
         </header>
 
         <section class="p-4 md:p-6">
-          <div v-if="initialLoading" class="flex min-h-[50vh] items-center justify-center">
-            <div class="spinner"></div>
+          <div v-if="loading" class="mb-4 flex items-center gap-2 text-sm text-slate-500">
+            <span class="spinner"></span>
+            Loading
           </div>
 
-          <div v-else class="space-y-4">
-            <section v-if="currentPage === 'dashboard'" class="space-y-4">
-              <div class="panel p-4">
-                <div class="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
-                  <label>
-                    <span class="label">From</span>
-                    <input v-model="dashboardFilters.fromDate" class="field" type="date">
-                  </label>
-                  <label>
-                    <span class="label">To</span>
-                    <input v-model="dashboardFilters.toDate" class="field" type="date">
-                  </label>
-                  <label>
-                    <span class="label">Status</span>
-                    <select v-model="dashboardFilters.status" class="field">
-                      <option value="">All</option>
-                      <option v-for="state in workflowStates" :key="state.StateCode" :value="state.StateCode">{{ state.StateName }}</option>
-                    </select>
-                  </label>
-                  <label>
-                    <span class="label">Department</span>
-                    <input v-model="dashboardFilters.responsibleDept" class="field" type="text">
-                  </label>
-                  <label>
-                    <span class="label">Customer Type</span>
-                    <select v-model="dashboardFilters.customerType" class="field">
-                      <option value="">All</option>
-                      <option v-for="type in customerTypes" :key="type" :value="type">{{ type }}</option>
-                    </select>
-                  </label>
-                  <label>
-                    <span class="label">Sales Owner</span>
-                    <select v-model="dashboardFilters.salesOwner" class="field" :disabled="!permissions.canViewAll">
-                      <option value="">All</option>
-                      <option v-for="person in users" :key="person.Email" :value="person.Email">{{ person.FullName || person.Email }}</option>
-                    </select>
-                  </label>
-                </div>
-                <div class="mt-3 flex flex-wrap gap-2">
+          <section v-if="currentPage === 'dashboard'" class="space-y-4">
+            <div class="panel p-4">
+              <div class="grid gap-3 md:grid-cols-4 xl:grid-cols-6">
+                <label><span class="label">From</span><input v-model="dashboardFilters.fromDate" class="field" type="date"></label>
+                <label><span class="label">To</span><input v-model="dashboardFilters.toDate" class="field" type="date"></label>
+                <label><span class="label">Stage</span><select v-model="dashboardFilters.stage" class="field"><option value="">All</option><option v-for="stage in lookups.pipelineStages" :key="stage.StageCode" :value="stage.StageCode">{{ stage.StageName }}</option></select></label>
+                <label><span class="label">Owner</span><select v-model="dashboardFilters.ownerUserId" class="field" :disabled="!permissions.canViewAll"><option value="">All</option><option v-for="user in lookups.users" :key="user.UserID" :value="user.UserID">{{ user.FullName }}</option></select></label>
+                <div class="flex items-end gap-2">
                   <button type="button" class="btn btn-primary" @click="loadDashboard"><i class="fa-solid fa-filter"></i>Apply</button>
-                  <button type="button" class="btn btn-secondary" @click="resetDashboardFilters"><i class="fa-solid fa-eraser"></i>Clear</button>
+                  <button type="button" class="btn btn-secondary" @click="resetDashboard"><i class="fa-solid fa-eraser"></i>Clear</button>
                 </div>
               </div>
-
-              <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
-                <div v-for="card in dashboardCards" :key="card.label" class="panel p-4">
-                  <div class="flex items-center justify-between gap-3">
-                    <div>
-                      <p class="text-xs font-bold uppercase text-slate-500">{{ card.label }}</p>
-                      <p class="mt-2 text-2xl font-black text-slate-950">{{ card.value }}</p>
-                    </div>
-                    <div :class="['flex h-10 w-10 items-center justify-center rounded-lg', card.className]">
-                      <i :class="['fa-solid', card.icon]"></i>
-                    </div>
-                  </div>
-                </div>
+            </div>
+            <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
+              <div v-for="card in dashboardCards" :key="card.label" class="panel p-4">
+                <p class="text-xs font-bold uppercase text-slate-500">{{ card.label }}</p>
+                <p class="mt-2 text-2xl font-black text-slate-950">{{ card.value }}</p>
               </div>
-
-              <div class="grid gap-4 xl:grid-cols-3">
-                <div class="panel p-4">
-                  <h2 class="text-sm font-black text-slate-900">Projects by Status</h2>
-                  <div class="chart-box"><canvas id="statusCountChart"></canvas></div>
-                </div>
-                <div class="panel p-4">
-                  <h2 class="text-sm font-black text-slate-900">Value by Status</h2>
-                  <div class="chart-box"><canvas id="statusValueChart"></canvas></div>
-                </div>
-                <div class="panel p-4">
-                  <h2 class="text-sm font-black text-slate-900">Customer Types</h2>
-                  <div class="chart-box"><canvas id="customerTypeChart"></canvas></div>
-                </div>
-              </div>
-
-              <div class="grid gap-4 xl:grid-cols-2">
-                <div class="panel">
-                  <div class="border-b border-slate-200 p-4">
-                    <h2 class="text-sm font-black text-slate-900">Recent Activity</h2>
-                  </div>
-                  <div class="table-wrap">
-                    <table>
-                      <thead><tr><th>Project</th><th>Status</th><th>Value</th><th>Updated</th></tr></thead>
-                      <tbody>
-                        <tr v-for="project in dashboard.recentProjects" :key="project.ProjectID">
-                          <td>
-                            <button class="font-bold text-blue-700" type="button" @click="editProject(project.ProjectID)">{{ project.ProjectName }}</button>
-                            <div class="text-xs text-slate-500">{{ project.CustomerName }}</div>
-                          </td>
-                          <td><span :class="statusClass(project.Status)">{{ statusName(project.Status) }}</span></td>
-                          <td>{{ money(project.ProjectValue) }}</td>
-                          <td>{{ project.UpdatedAt }}</td>
-                        </tr>
-                        <tr v-if="!dashboard.recentProjects.length"><td colspan="4" class="text-center text-slate-500">No records</td></tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-                <div class="panel">
-                  <div class="border-b border-slate-200 p-4">
-                    <h2 class="text-sm font-black text-slate-900">Top Project Value</h2>
-                  </div>
-                  <div class="table-wrap">
-                    <table>
-                      <thead><tr><th>Project</th><th>Owner</th><th>Status</th><th>Value</th></tr></thead>
-                      <tbody>
-                        <tr v-for="project in dashboard.topProjectsByValue" :key="project.ProjectID">
-                          <td>
-                            <button class="font-bold text-blue-700" type="button" @click="editProject(project.ProjectID)">{{ project.ProjectName }}</button>
-                            <div class="text-xs text-slate-500">{{ project.CustomerName }}</div>
-                          </td>
-                          <td>{{ project.AssignedSalesEmail }}</td>
-                          <td><span :class="statusClass(project.Status)">{{ statusName(project.Status) }}</span></td>
-                          <td>{{ money(project.ProjectValue) }}</td>
-                        </tr>
-                        <tr v-if="!dashboard.topProjectsByValue.length"><td colspan="4" class="text-center text-slate-500">No records</td></tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            <section v-if="currentPage === 'customers'" class="space-y-4">
+            </div>
+            <div class="grid gap-4 xl:grid-cols-3">
               <div class="panel p-4">
-                <div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px_160px_auto]">
-                  <input v-model="customerQuery" class="field" type="search" placeholder="Search customers">
-                  <select v-model="customerFilters.customerType" class="field">
-                    <option value="">All customer types</option>
-                    <option v-for="type in customerTypes" :key="type" :value="type">{{ type }}</option>
-                  </select>
-                  <select v-model.number="customerPager.pageSize" class="field" @change="loadCustomers(1)">
-                    <option :value="10">10 rows</option>
-                    <option :value="25">25 rows</option>
-                    <option :value="50">50 rows</option>
-                    <option :value="100">100 rows</option>
-                  </select>
-                  <div class="flex gap-2">
-                    <button type="button" class="btn btn-secondary" @click="loadCustomers(1)"><i class="fa-solid fa-magnifying-glass"></i>Search</button>
-                    <button type="button" class="btn btn-primary" @click="newCustomer"><i class="fa-solid fa-plus"></i>New</button>
-                  </div>
-                </div>
+                <h2 class="text-sm font-black text-slate-900">Pipeline Count</h2>
+                <div class="chart-box"><canvas id="pipelineChart"></canvas></div>
               </div>
-              <div class="panel">
-                <div class="table-wrap">
-                  <table>
-                    <thead><tr><th>ID</th><th>Company</th><th>Contact</th><th>Type</th><th>Owner</th><th></th></tr></thead>
-                    <tbody>
-                      <tr v-for="customer in customers.items" :key="customer.CustomerID">
-                        <td class="font-bold">{{ customer.CustomerID }}</td>
-                        <td>
-                          <button class="font-bold text-blue-700" type="button" @click="editCustomer(customer.CustomerID)">{{ customer.CompanyName }}</button>
-                          <div class="text-xs text-slate-500">{{ customer.Industry }}</div>
-                        </td>
-                        <td>
-                          <div>{{ customer.ContactPerson }}</div>
-                          <div class="text-xs text-slate-500">{{ customer.Phone }}</div>
-                        </td>
-                        <td>{{ customer.CustomerType }}</td>
-                        <td>{{ customer.OwnerEmail }}</td>
-                        <td class="text-right">
-                          <button type="button" class="icon-btn" title="Edit" @click="editCustomer(customer.CustomerID)"><i class="fa-solid fa-pen"></i></button>
-                          <button v-if="permissions.canDeleteRecords" type="button" class="icon-btn text-red-600" title="Delete" @click="removeCustomer(customer.CustomerID)"><i class="fa-solid fa-trash"></i></button>
-                        </td>
-                      </tr>
-                      <tr v-if="!customers.items.length"><td colspan="6" class="text-center text-slate-500">No records</td></tr>
-                    </tbody>
-                  </table>
-                </div>
-                <div class="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 p-3">
-                  <span class="text-sm text-slate-500">Page {{ customers.page }} of {{ customers.totalPages }} · {{ customers.total }} records</span>
-                  <div class="flex gap-2">
-                    <button type="button" class="btn btn-secondary" :disabled="customers.page <= 1" @click="loadCustomers(customers.page - 1)">Prev</button>
-                    <button type="button" class="btn btn-secondary" :disabled="customers.page >= customers.totalPages" @click="loadCustomers(customers.page + 1)">Next</button>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            <section v-if="currentPage === 'customer-form'" class="panel p-4">
-              <form class="space-y-4" @submit.prevent="saveCustomerForm">
-                <div class="flex flex-wrap items-center justify-between gap-3">
-                  <h2 class="text-lg font-black text-slate-950">{{ customerForm.CustomerID ? 'Edit Customer' : 'New Customer' }}</h2>
-                  <div class="flex gap-2">
-                    <button type="button" class="btn btn-secondary" @click="navigate('customers')"><i class="fa-solid fa-xmark"></i>Cancel</button>
-                    <button type="submit" class="btn btn-primary"><i class="fa-solid fa-floppy-disk"></i>Save</button>
-                  </div>
-                </div>
-                <div class="grid gap-4 md:grid-cols-2">
-                  <label><span class="label">Company Name</span><input v-model="customerForm.CompanyName" :class="fieldClass('CompanyName')" type="text"><span v-if="fieldError('CompanyName')" class="error-text">{{ fieldError('CompanyName') }}</span></label>
-                  <label><span class="label">Contact Person</span><input v-model="customerForm.ContactPerson" class="field" type="text"></label>
-                  <label><span class="label">Phone</span><input v-model="customerForm.Phone" class="field" type="text"></label>
-                  <label><span class="label">Email</span><input v-model="customerForm.Email" :class="fieldClass('Email')" type="email"><span v-if="fieldError('Email')" class="error-text">{{ fieldError('Email') }}</span></label>
-                  <label><span class="label">Tax ID</span><input v-model="customerForm.TaxID" class="field" type="text"></label>
-                  <label><span class="label">Customer Type</span><select v-model="customerForm.CustomerType" :class="fieldClass('CustomerType')"><option value="">Select</option><option v-for="type in customerTypes" :key="type" :value="type">{{ type }}</option></select><span v-if="fieldError('CustomerType')" class="error-text">{{ fieldError('CustomerType') }}</span></label>
-                  <label><span class="label">Industry</span><input v-model="customerForm.Industry" class="field" type="text"></label>
-                  <label v-if="permissions.canViewAll"><span class="label">Owner</span><select v-model="customerForm.OwnerEmail" :class="fieldClass('OwnerEmail')"><option value="">Select</option><option v-for="person in users" :key="person.Email" :value="person.Email">{{ person.FullName || person.Email }}</option></select><span v-if="fieldError('OwnerEmail')" class="error-text">{{ fieldError('OwnerEmail') }}</span></label>
-                  <label class="md:col-span-2"><span class="label">Address</span><textarea v-model="customerForm.Address" class="field min-h-24"></textarea></label>
-                  <label class="md:col-span-2"><span class="label">Notes</span><textarea v-model="customerForm.Notes" class="field min-h-24"></textarea></label>
-                </div>
-              </form>
-            </section>
-
-            <section v-if="currentPage === 'projects'" class="space-y-4">
               <div class="panel p-4">
-                <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_220px_180px_180px_auto]">
-                  <input v-model="projectFilters.query" class="field" type="search" placeholder="Search projects">
-                  <select v-model="projectFilters.status" class="field">
-                    <option value="">All statuses</option>
-                    <option v-for="state in workflowStates" :key="state.StateCode" :value="state.StateCode">{{ state.StateName }}</option>
-                  </select>
-                  <input v-model="projectFilters.responsibleDept" class="field" type="text" placeholder="Department">
-                  <select v-model.number="projectPager.pageSize" class="field" @change="loadProjects(1)">
-                    <option :value="10">10 rows</option>
-                    <option :value="25">25 rows</option>
-                    <option :value="50">50 rows</option>
-                    <option :value="100">100 rows</option>
-                  </select>
-                  <div class="flex gap-2">
-                    <button type="button" class="btn btn-secondary" @click="loadProjects(1)"><i class="fa-solid fa-magnifying-glass"></i>Search</button>
-                    <button type="button" class="btn btn-primary" @click="newProject"><i class="fa-solid fa-plus"></i>New</button>
-                  </div>
-                </div>
+                <h2 class="text-sm font-black text-slate-900">Pipeline Value</h2>
+                <div class="chart-box"><canvas id="valueChart"></canvas></div>
               </div>
-              <div class="panel">
-                <div class="table-wrap">
-                  <table>
-                    <thead><tr><th>ID</th><th>Project</th><th>Customer</th><th>Status</th><th>Owner</th><th>Value</th><th></th></tr></thead>
-                    <tbody>
-                      <tr v-for="project in projects.items" :key="project.ProjectID">
-                        <td class="font-bold">{{ project.ProjectID }}</td>
-                        <td>
-                          <button type="button" class="font-bold text-blue-700" @click="editProject(project.ProjectID)">{{ project.ProjectName }}</button>
-                          <div class="text-xs text-slate-500">{{ project.ResponsibleDept }}</div>
-                        </td>
-                        <td>{{ project.CustomerName || project.CustomerID }}</td>
-                        <td><span :class="statusClass(project.Status)">{{ statusName(project.Status) }}</span></td>
-                        <td>{{ project.AssignedSalesEmail }}</td>
-                        <td>{{ money(project.ProjectValue) }}</td>
-                        <td class="text-right">
-                          <button type="button" class="icon-btn" title="Edit" @click="editProject(project.ProjectID)"><i class="fa-solid fa-pen"></i></button>
-                          <button v-if="permissions.canDeleteRecords" type="button" class="icon-btn text-red-600" title="Delete" @click="removeProject(project.ProjectID)"><i class="fa-solid fa-trash"></i></button>
-                        </td>
-                      </tr>
-                      <tr v-if="!projects.items.length"><td colspan="7" class="text-center text-slate-500">No records</td></tr>
-                    </tbody>
-                  </table>
-                </div>
-                <div class="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 p-3">
-                  <span class="text-sm text-slate-500">Page {{ projects.page }} of {{ projects.totalPages }} · {{ projects.total }} records</span>
-                  <div class="flex gap-2">
-                    <button type="button" class="btn btn-secondary" :disabled="projects.page <= 1" @click="loadProjects(projects.page - 1)">Prev</button>
-                    <button type="button" class="btn btn-secondary" :disabled="projects.page >= projects.totalPages" @click="loadProjects(projects.page + 1)">Next</button>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            <section v-if="currentPage === 'project-form'" class="panel p-4">
-              <form class="space-y-4" @submit.prevent="saveProjectForm">
-                <div class="flex flex-wrap items-center justify-between gap-3">
-                  <h2 class="text-lg font-black text-slate-950">{{ projectForm.ProjectID ? 'Edit Project' : 'New Project' }}</h2>
-                  <div class="flex gap-2">
-                    <button type="button" class="btn btn-secondary" @click="navigate('projects')"><i class="fa-solid fa-xmark"></i>Cancel</button>
-                    <button type="submit" class="btn btn-primary"><i class="fa-solid fa-floppy-disk"></i>Save</button>
-                  </div>
-                </div>
-                <div class="grid gap-4 md:grid-cols-2">
-                  <label><span class="label">Customer</span><select v-model="projectForm.CustomerID" :class="fieldClass('CustomerID')"><option value="">Select</option><option v-for="customer in customerOptions" :key="customer.CustomerID" :value="customer.CustomerID">{{ customer.CompanyName }} · {{ customer.CustomerID }}</option></select><span v-if="fieldError('CustomerID')" class="error-text">{{ fieldError('CustomerID') }}</span></label>
-                  <label><span class="label">Project Name</span><input v-model="projectForm.ProjectName" :class="fieldClass('ProjectName')" type="text"><span v-if="fieldError('ProjectName')" class="error-text">{{ fieldError('ProjectName') }}</span></label>
-                  <label><span class="label">Responsible Dept</span><input v-model="projectForm.ResponsibleDept" class="field" type="text"></label>
-                  <label><span class="label">Assigned Sales</span><select v-model="projectForm.AssignedSalesEmail" :class="fieldClass('AssignedSalesEmail')" :disabled="!permissions.canViewAll"><option value="">Select</option><option v-for="person in users" :key="person.Email" :value="person.Email">{{ person.FullName || person.Email }}</option></select><span v-if="fieldError('AssignedSalesEmail')" class="error-text">{{ fieldError('AssignedSalesEmail') }}</span></label>
-                  <label><span class="label">Project Value</span><input v-model.number="projectForm.ProjectValue" :class="fieldClass('ProjectValue')" type="number" min="0" step="0.01"><span v-if="fieldError('ProjectValue')" class="error-text">{{ fieldError('ProjectValue') }}</span></label>
-                  <label><span class="label">Probability</span><input v-model.number="projectForm.Probability" :class="fieldClass('Probability')" type="number" min="0" max="100"><span v-if="fieldError('Probability')" class="error-text">{{ fieldError('Probability') }}</span></label>
-                  <label><span class="label">Status</span><select v-model="projectForm.Status" :class="fieldClass('Status')" @change="ensureStatusDetails"><option value="">Select</option><option v-for="state in workflowStates" :key="state.StateCode" :value="state.StateCode">{{ state.StateName }}</option></select><span v-if="fieldError('Status')" class="error-text">{{ fieldError('Status') }}</span></label>
-                  <label><span class="label">Expected Close Date</span><input v-model="projectForm.ExpectedCloseDate" class="field" type="date"></label>
-                  <label><span class="label">Priority</span><select v-model="projectForm.Priority" :class="fieldClass('Priority')"><option v-for="priority in priorities" :key="priority" :value="priority">{{ priority }}</option></select><span v-if="fieldError('Priority')" class="error-text">{{ fieldError('Priority') }}</span></label>
-                  <label class="md:col-span-2"><span class="label">Notes</span><textarea v-model="projectForm.Notes" class="field min-h-24"></textarea></label>
-                </div>
-                <div v-if="currentStatusFields.length" class="border-t border-slate-200 pt-4">
-                  <h3 class="text-sm font-black text-slate-900">Status Details</h3>
-                  <div class="mt-3 grid gap-4 md:grid-cols-2">
-                    <label v-for="field in currentStatusFields" :key="field.key" :class="{ 'md:col-span-2': field.type === 'textarea' }">
-                      <span class="label">{{ field.label }}</span>
-                      <select v-if="field.type === 'select'" v-model="projectForm.StatusDetails[field.key]" :class="fieldClass('StatusDetails.' + field.key)">
-                        <option value="">Select</option>
-                        <option v-for="option in field.options" :key="option" :value="option">{{ option }}</option>
-                      </select>
-                      <textarea v-else-if="field.type === 'textarea'" v-model="projectForm.StatusDetails[field.key]" :class="fieldClass('StatusDetails.' + field.key)" class="min-h-24"></textarea>
-                      <input v-else v-model="projectForm.StatusDetails[field.key]" :class="fieldClass('StatusDetails.' + field.key)" :type="field.type">
-                      <span v-if="fieldError('StatusDetails.' + field.key)" class="error-text">{{ fieldError('StatusDetails.' + field.key) }}</span>
-                    </label>
-                  </div>
-                </div>
-              </form>
-            </section>
-
-            <section v-if="currentPage === 'catalogues'" class="space-y-4">
               <div class="panel p-4">
-                <div class="flex flex-wrap gap-2">
-                  <button v-for="library in libraries" :key="library.LibraryKey" type="button" :class="['btn', selectedLibrary === library.LibraryKey ? 'btn-primary' : 'btn-secondary']" @click="selectLibrary(library.LibraryKey)">
-                    <i class="fa-solid fa-folder-open"></i>{{ library.DisplayName }}
-                  </button>
-                </div>
+                <h2 class="text-sm font-black text-slate-900">Collections</h2>
+                <div class="chart-box"><canvas id="collectionChart"></canvas></div>
               </div>
-              <div class="panel">
-                <div class="table-wrap">
-                  <table>
-                    <thead><tr><th>File</th><th>Type</th><th>Category</th><th>Size</th><th>Updated</th><th></th></tr></thead>
-                    <tbody>
-                      <tr v-for="file in libraryFiles" :key="file.Url">
-                        <td class="font-bold">{{ file.FileName }}</td>
-                        <td>{{ file.FileType }}</td>
-                        <td>{{ file.Category }}</td>
-                        <td>{{ file.SizeLabel }}</td>
-                        <td>{{ file.LastUpdated }}</td>
-                        <td class="text-right"><a class="btn btn-secondary" :href="file.Url" target="_blank"><i class="fa-solid fa-arrow-up-right-from-square"></i>Open</a></td>
-                      </tr>
-                      <tr v-if="!libraryFiles.length"><td colspan="6" class="text-center text-slate-500">No records</td></tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </section>
+            </div>
+            <div class="grid gap-4 xl:grid-cols-2">
+              <record-list title="Top Opportunities" :rows="dashboard.topOpportunities" :fields="['OpportunityCode','OpportunityName','Stage','EstimatedValue','ExpectedCloseDate']"></record-list>
+              <record-list title="Overdue Invoices" :rows="dashboard.overdueInvoices" :fields="['InvoiceNumber','CustomerID','DueDate','OutstandingAmount','PaymentStatus']"></record-list>
+            </div>
+          </section>
 
-            <section v-if="currentPage === 'users'" class="space-y-4">
-              <div class="panel p-4">
-                <form class="grid gap-3 md:grid-cols-[1fr_160px_1fr_1fr_120px_auto]" @submit.prevent="saveUserForm">
-                  <input v-model="userForm.Email" class="field" type="email" placeholder="Email">
-                  <select v-model="userForm.Role" class="field"><option>Admin</option><option>Manager</option><option>Sales</option></select>
-                  <input v-model="userForm.FullName" class="field" type="text" placeholder="Full name">
-                  <input v-model="userForm.Department" class="field" type="text" placeholder="Department">
-                  <label class="flex items-center gap-2 text-sm font-bold text-slate-700"><input v-model="userForm.IsActive" type="checkbox"> Active</label>
-                  <button type="submit" class="btn btn-primary"><i class="fa-solid fa-floppy-disk"></i>Save</button>
-                </form>
-              </div>
-              <div class="panel">
-                <div class="table-wrap">
-                  <table>
-                    <thead><tr><th>Email</th><th>Role</th><th>Name</th><th>Department</th><th>Active</th><th></th></tr></thead>
-                    <tbody>
-                      <tr v-for="person in users" :key="person.Email">
-                        <td class="font-bold">{{ person.Email }}</td>
-                        <td>{{ person.Role }}</td>
-                        <td>{{ person.FullName }}</td>
-                        <td>{{ person.Department }}</td>
-                        <td>{{ person.IsActive ? 'TRUE' : 'FALSE' }}</td>
-                        <td class="text-right">
-                          <button type="button" class="icon-btn" title="Edit" @click="editUser(person)"><i class="fa-solid fa-pen"></i></button>
-                          <button type="button" class="icon-btn text-red-600" title="Deactivate" @click="removeUser(person.Email)"><i class="fa-solid fa-user-slash"></i></button>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
+          <section v-if="currentPage === 'entity'" class="space-y-4">
+            <div class="panel p-4">
+              <div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_150px_auto]">
+                <input v-model="entityFilters.query" class="field" type="search" :placeholder="'Search ' + activeSchema.label">
+                <select v-model.number="entityFilters.pageSize" class="field" @change="loadEntity(1)">
+                  <option :value="25">25 rows</option>
+                  <option :value="50">50 rows</option>
+                  <option :value="100">100 rows</option>
+                </select>
+                <div class="flex gap-2">
+                  <button type="button" class="btn btn-secondary" @click="loadEntity(1)"><i class="fa-solid fa-magnifying-glass"></i>Search</button>
+                  <button v-if="activeSchema.canCreate" type="button" class="btn btn-primary" @click="newRecord"><i class="fa-solid fa-plus"></i>New</button>
                 </div>
               </div>
-            </section>
-
-            <section v-if="currentPage === 'settings'" class="panel">
+            </div>
+            <div class="panel">
               <div class="table-wrap">
                 <table>
-                  <thead><tr><th>Key</th><th>Value</th><th>Description</th><th></th></tr></thead>
+                  <thead><tr><th v-for="field in tableFields" :key="field">{{ field }}</th><th></th></tr></thead>
                   <tbody>
-                    <tr v-for="setting in settingsRows" :key="setting.Key">
-                      <td class="font-bold">{{ setting.Key }}</td>
-                      <td><input v-model="setting.Value" class="field" type="text"></td>
-                      <td>{{ setting.Description }}</td>
-                      <td class="text-right"><button type="button" class="btn btn-primary" @click="saveSettingRow(setting)"><i class="fa-solid fa-floppy-disk"></i>Save</button></td>
+                    <tr v-for="row in entityRows.items" :key="row[activeSchema.key]">
+                      <td v-for="field in tableFields" :key="field">{{ displayValue(row[field]) }}</td>
+                      <td class="text-right">
+                        <button type="button" class="icon-btn" title="Edit" @click="editRecord(row[activeSchema.key])"><i class="fa-solid fa-pen"></i></button>
+                        <button v-if="activeSchema.canDelete" type="button" class="icon-btn text-red-600" title="Delete" @click="removeRecord(row[activeSchema.key])"><i class="fa-solid fa-trash"></i></button>
+                      </td>
                     </tr>
+                    <tr v-if="!entityRows.items.length"><td :colspan="tableFields.length + 1" class="text-center text-slate-500">No records</td></tr>
                   </tbody>
                 </table>
               </div>
-            </section>
+              <div class="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 p-3">
+                <span class="text-sm text-slate-500">Page {{ entityRows.page }} of {{ entityRows.totalPages }} · {{ entityRows.total }} records</span>
+                <div class="flex gap-2">
+                  <button type="button" class="btn btn-secondary" :disabled="entityRows.page <= 1" @click="loadEntity(entityRows.page - 1)">Prev</button>
+                  <button type="button" class="btn btn-secondary" :disabled="entityRows.page >= entityRows.totalPages" @click="loadEntity(entityRows.page + 1)">Next</button>
+                </div>
+              </div>
+            </div>
+          </section>
 
-            <section v-if="currentPage === 'audit'" class="space-y-4">
-              <div class="panel p-4">
-                <div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_200px_200px_auto]">
-                  <input v-model="auditFilters.query" class="field" type="search" placeholder="Search audit">
-                  <input v-model="auditFilters.action" class="field" type="text" placeholder="Action">
-                  <input v-model="auditFilters.actorEmail" class="field" type="email" placeholder="Actor">
-                  <button type="button" class="btn btn-secondary" @click="loadAudit(1)"><i class="fa-solid fa-magnifying-glass"></i>Search</button>
+          <section v-if="currentPage === 'form'" class="panel p-4">
+            <form class="space-y-4" @submit.prevent="saveRecord">
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <h2 class="text-lg font-black text-slate-950">{{ recordForm[activeSchema.key] ? 'Edit' : 'New' }} {{ activeSchema.label }}</h2>
+                <div class="flex gap-2">
+                  <button type="button" class="btn btn-secondary" @click="currentPage = 'entity'"><i class="fa-solid fa-xmark"></i>Cancel</button>
+                  <button type="submit" class="btn btn-primary"><i class="fa-solid fa-floppy-disk"></i>Save</button>
                 </div>
               </div>
-              <div class="panel">
-                <div class="table-wrap">
-                  <table>
-                    <thead><tr><th>Timestamp</th><th>Actor</th><th>Action</th><th>Entity</th><th>Context</th></tr></thead>
-                    <tbody>
-                      <tr v-for="log in audit.items" :key="log.AuditID">
-                        <td>{{ log.Timestamp }}</td>
-                        <td>{{ log.ActorEmail }}</td>
-                        <td class="font-bold">{{ log.Action }}</td>
-                        <td>{{ log.EntityType }} · {{ log.EntityID }}</td>
-                        <td>{{ log.IpOrContext }}</td>
-                      </tr>
-                      <tr v-if="!audit.items.length"><td colspan="5" class="text-center text-slate-500">No records</td></tr>
-                    </tbody>
-                  </table>
+              <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                <label v-for="field in editableFields" :key="field">
+                  <span class="label">{{ field }} <span v-if="isRequired(field)" class="text-red-600">*</span></span>
+                  <select v-if="fieldOptions(field).length" v-model="recordForm[field]" :class="fieldClass(field)">
+                    <option value=""></option>
+                    <option v-for="option in fieldOptions(field)" :key="option.value" :value="option.value">{{ option.label }}</option>
+                  </select>
+                  <textarea v-else-if="fieldType(field) === 'textarea'" v-model="recordForm[field]" :class="fieldClass(field)" rows="3"></textarea>
+                  <input v-else-if="fieldType(field) === 'checkbox'" v-model="recordForm[field]" class="h-5 w-5" type="checkbox">
+                  <input v-else v-model="recordForm[field]" :class="fieldClass(field)" :type="fieldType(field)">
+                  <span v-if="fieldError(field)" class="error-text">{{ fieldError(field) }}</span>
+                </label>
+              </div>
+            </form>
+          </section>
+
+          <section v-if="currentPage === 'reports'" class="space-y-4">
+            <div class="panel p-4">
+              <div class="grid gap-3 md:grid-cols-5">
+                <label><span class="label">Report</span><select v-model="reportType" class="field"><option value="pipeline">Pipeline</option><option value="collections">Collections</option><option value="activities">Activities</option></select></label>
+                <label><span class="label">From</span><input v-model="reportFilters.fromDate" class="field" type="date"></label>
+                <label><span class="label">To</span><input v-model="reportFilters.toDate" class="field" type="date"></label>
+                <label><span class="label">Search</span><input v-model="reportFilters.query" class="field" type="search"></label>
+                <div class="flex items-end gap-2"><button type="button" class="btn btn-primary" @click="loadReport"><i class="fa-solid fa-table"></i>Run</button><button type="button" class="btn btn-secondary" @click="exportReport"><i class="fa-solid fa-file-excel"></i>Export</button></div>
+              </div>
+            </div>
+            <record-list title="Report Results" :rows="report.rows" :fields="report.headers"></record-list>
+            <a v-if="lastExport.url" class="font-bold text-blue-700 underline" :href="lastExport.url" target="_blank" rel="noopener">{{ lastExport.fileName }}</a>
+          </section>
+
+          <section v-if="currentPage === 'catalogues'" class="space-y-4">
+            <div class="panel p-4">
+              <div class="flex flex-wrap items-center gap-2">
+                <button type="button" class="btn btn-secondary" @click="loadCatalogues"><i class="fa-solid fa-rotate-right"></i>Refresh</button>
+                <button v-for="lib in catalogues" :key="lib.LibraryKey" type="button" :class="['btn', activeCatalogue === lib.LibraryKey ? 'btn-primary' : 'btn-secondary']" @click="openCatalogue(lib.LibraryKey)">{{ lib.DisplayName }}</button>
+                <span v-if="!catalogues.length" class="text-sm text-slate-500">No catalogue libraries configured. Add rows to the Catalogues sheet (LibraryKey, DisplayName, FolderId).</span>
+              </div>
+            </div>
+            <div v-if="activeCatalogue" class="panel">
+              <div class="border-b border-slate-200 p-4"><h2 class="text-sm font-black text-slate-900">{{ catalogueFiles.library.DisplayName || 'Files' }}</h2></div>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>File</th><th>Type</th><th>Size</th><th>Updated</th><th></th></tr></thead>
+                  <tbody>
+                    <tr v-for="file in catalogueFiles.files" :key="file.Url">
+                      <td>{{ file.FileName }}</td>
+                      <td>{{ file.FileType }}</td>
+                      <td>{{ file.SizeLabel }}</td>
+                      <td>{{ file.LastUpdated }}</td>
+                      <td class="text-right"><a class="font-bold text-blue-700 underline" :href="file.Url" target="_blank" rel="noopener">Open</a></td>
+                    </tr>
+                    <tr v-if="!catalogueFiles.files.length"><td colspan="5" class="text-center text-slate-500">No files</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <section v-if="currentPage === 'migration'" class="space-y-4">
+            <div class="panel p-4">
+              <div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px_auto]">
+                <label><span class="label">Source Spreadsheet ID</span><input v-model.trim="migration.sourceSpreadsheetId" class="field" type="text"></label>
+                <label><span class="label">Sheet Name</span><input v-model.trim="migration.sourceSheetName" class="field" type="text"></label>
+                <div class="flex items-end gap-2"><button type="button" class="btn btn-secondary" @click="previewMigration"><i class="fa-solid fa-eye"></i>Preview</button><button type="button" class="btn btn-primary" @click="importMigration"><i class="fa-solid fa-file-import"></i>Import</button></div>
+              </div>
+            </div>
+            <record-list title="Migration Mapping" :rows="migrationMapping" :fields="['sourceColumn','targetSheet','targetField','rule']"></record-list>
+            <pre v-if="migrationResult" class="panel overflow-auto p-4 text-xs">{{ migrationResult }}</pre>
+          </section>
+
+          <section v-if="currentPage === 'health'" class="space-y-4">
+            <div class="flex gap-2"><button type="button" class="btn btn-primary" @click="loadHealth"><i class="fa-solid fa-heart-pulse"></i>Run Health Check</button><button type="button" class="btn btn-secondary" @click="installTriggers"><i class="fa-solid fa-bell"></i>Install Triggers</button><button type="button" class="btn btn-secondary" @click="removeTriggers"><i class="fa-solid fa-bell-slash"></i>Remove Triggers</button></div>
+            <div class="panel p-4"><div class="text-2xl font-black">{{ health.summary.status || 'Not Run' }}</div><div class="text-sm text-slate-500">{{ health.generatedAt }}</div></div>
+            <record-list title="Health Checks" :rows="health.checks" :fields="['name','status','message','recommendedAction']"></record-list>
+          </section>
+
+          <section v-if="currentPage === 'tests'" class="space-y-4">
+            <button type="button" class="btn btn-primary" @click="runTests"><i class="fa-solid fa-vial-circle-check"></i>Run All Tests</button>
+            <div class="panel p-4"><div class="text-xl font-black">{{ tests.passed || 0 }} / {{ tests.totalTests || 0 }} Passed</div><div class="text-sm text-slate-500">Failed {{ tests.failed || 0 }} · Duration {{ tests.durationMs || 0 }} ms</div></div>
+            <record-list title="Test Results" :rows="tests.tests" :fields="['name','status','durationMs','details']"></record-list>
+          </section>
+
+          <section v-if="currentPage === 'settings'" class="space-y-4">
+            <button type="button" class="btn btn-primary" @click="loadSettings"><i class="fa-solid fa-rotate-right"></i>Load Settings</button>
+            <div class="panel">
+              <div class="table-wrap"><table><thead><tr><th>Key</th><th>Value</th><th>Description</th><th></th></tr></thead><tbody><tr v-for="setting in settingsRows" :key="setting.Key"><td class="font-bold">{{ setting.Key }}</td><td><input v-model="setting.Value" class="field"></td><td>{{ setting.Description }}</td><td class="text-right"><button type="button" class="btn btn-secondary" @click="saveSetting(setting)">Save</button></td></tr></tbody></table></div>
+            </div>
+          </section>
+
+          <section v-if="currentPage === 'users'" class="space-y-4">
+            <div class="panel p-4">
+              <div class="grid gap-3 md:grid-cols-4">
+                <label><span class="label">Email</span><input v-model.trim="userForm.Email" :class="fieldClass('Email')" placeholder="name@example.com"><span v-if="fieldError('Email')" class="error-text">{{ fieldError('Email') }}</span></label>
+                <label><span class="label">Username</span><input v-model.trim="userForm.Username" :class="fieldClass('Username')" placeholder="login name"><span v-if="fieldError('Username')" class="error-text">{{ fieldError('Username') }}</span></label>
+                <label><span class="label">Role</span><select v-model="userForm.Role" :class="fieldClass('Role')"><option>Admin</option><option>Manager</option><option>Sales</option></select><span v-if="fieldError('Role')" class="error-text">{{ fieldError('Role') }}</span></label>
+                <div class="flex items-end gap-2">
+                  <button type="button" class="btn btn-primary" @click="saveUser"><i class="fa-solid fa-user-plus"></i>Save Login</button>
+                  <button type="button" class="btn btn-secondary" @click="resetUserForm"><i class="fa-solid fa-eraser"></i>Clear</button>
                 </div>
-                <div class="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 p-3">
-                  <span class="text-sm text-slate-500">Page {{ audit.page }} of {{ audit.totalPages }} · {{ audit.total }} records</span>
-                  <div class="flex gap-2">
-                    <button type="button" class="btn btn-secondary" :disabled="audit.page <= 1" @click="loadAudit(audit.page - 1)">Prev</button>
-                    <button type="button" class="btn btn-secondary" :disabled="audit.page >= audit.totalPages" @click="loadAudit(audit.page + 1)">Next</button>
-                  </div>
+                <label><span class="label">Full Name</span><input v-model="userForm.FullName" class="field" placeholder="Full name"></label>
+                <label><span class="label">Department</span><input v-model="userForm.Department" class="field" placeholder="Department"></label>
+                <label><span class="label">Password</span><input v-model="userForm.Password" :class="fieldClass('Password')" type="password" :placeholder="userForm.UserID ? 'Leave blank to keep current password' : 'Required for new login'"><span v-if="fieldError('Password')" class="error-text">{{ fieldError('Password') }}</span></label>
+                <div class="flex flex-col justify-end gap-2 text-sm">
+                  <label class="flex items-center gap-2"><input v-model="userForm.IsActive" type="checkbox"> Active</label>
+                  <label class="flex items-center gap-2"><input v-model="userForm.MustChangePassword" type="checkbox"> Must change password</label>
                 </div>
               </div>
-            </section>
-          </div>
+            </div>
+            <div class="panel">
+              <div class="border-b border-slate-200 p-4"><h2 class="text-sm font-black text-slate-900">Users</h2></div>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Email</th><th>Username</th><th>Name</th><th>Role</th><th>Active</th><th>Last Login</th><th></th></tr></thead>
+                  <tbody>
+                    <tr v-for="person in users" :key="person.Email">
+                      <td>{{ person.Email }}</td>
+                      <td>{{ person.Username }}</td>
+                      <td>{{ person.FullName }}</td>
+                      <td>{{ person.Role }}</td>
+                      <td>{{ person.IsActive ? 'Yes' : 'No' }}</td>
+                      <td>{{ person.LastLoginAt }}</td>
+                      <td class="text-right">
+                        <button type="button" class="icon-btn" title="Edit user" @click="editUser(person)"><i class="fa-solid fa-pen"></i></button>
+                        <button type="button" class="icon-btn text-red-600" title="Deactivate user" @click="deactivateUser(person.Email)"><i class="fa-solid fa-user-slash"></i></button>
+                      </td>
+                    </tr>
+                    <tr v-if="!users.length"><td colspan="7" class="text-center text-slate-500">No records</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <section v-if="currentPage === 'audit'" class="space-y-4">
+            <div class="panel p-4"><div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_160px_auto]"><input v-model="auditFilters.query" class="field" type="search"><select v-model.number="auditFilters.pageSize" class="field"><option :value="25">25 rows</option><option :value="50">50 rows</option><option :value="100">100 rows</option></select><button type="button" class="btn btn-primary" @click="loadAudit(1)">Search</button></div></div>
+            <record-list title="Audit Logs" :rows="audit.items" :fields="['Timestamp','UserEmail','Action','EntityType','EntityID','Result','ErrorMessage']"></record-list>
+          </section>
         </section>
       </main>
 
-      <nav class="fixed bottom-0 left-0 right-0 z-30 grid grid-cols-4 border-t border-slate-200 bg-white md:hidden">
-        <button v-for="item in mobileNavItems" :key="item.page" type="button" :class="['py-2 text-xs font-bold', currentPage === item.page ? 'text-blue-700' : 'text-slate-500']" @click="navigate(item.page)">
-          <i :class="['fa-solid', item.icon, 'block text-base']"></i>{{ item.short }}
-        </button>
-      </nav>
-    </section>
-
-    <div v-if="toast" :class="['toast p-4', toast.type === 'error' ? 'bg-red-600 text-white' : 'bg-slate-950 text-white']">
-      <div class="flex items-start gap-3">
-        <i :class="['fa-solid mt-1', toast.type === 'error' ? 'fa-circle-exclamation' : 'fa-circle-check']"></i>
-        <div class="min-w-0">
-          <div class="font-bold">{{ toast.title }}</div>
-          <div class="text-sm opacity-90">{{ toast.message }}</div>
-        </div>
-        <button type="button" class="ml-auto" @click="toast = null"><i class="fa-solid fa-xmark"></i></button>
+      <div v-if="toast" :class="['toast border p-4 text-sm', toast.type === 'error' ? 'border-red-200 bg-red-50 text-red-800' : 'border-green-200 bg-green-50 text-green-800']">
+        <div class="font-black">{{ toast.title }}</div>
+        <div>{{ toast.message }}</div>
       </div>
-    </div>
-
-    <div v-if="loading && !initialLoading" class="fixed inset-0 z-50 flex items-center justify-center bg-white/45">
-      <div class="panel flex items-center gap-3 p-4 font-bold"><span class="spinner"></span>Loading</div>
-    </div>
+    </section>
   </div>
 </script>
 
 <script>
-  const { createApp } = Vue;
-
-  createApp({
-    template: '#crm-template',
-    data() {
-      return {
-        initialLoading: true,
-        loading: false,
-        accessDenied: false,
-        accessDeniedMessage: 'You do not have permission to access MATCHPOINT CRM.',
-        mobileMenuOpen: false,
-        toast: null,
-        auth: {},
-        settings: {},
-        permissions: {},
-        customerTypes: [],
-        priorities: [],
-        workflowStates: [],
-        statusFieldConfig: {},
-        currentPage: 'dashboard',
-        fieldErrors: {},
-        users: [],
-        dashboard: {
-          kpis: {},
-          recentProjects: [],
-          topProjectsByValue: [],
-          projectCountByStatus: {},
-          projectValueByStatus: {},
-          customerCountByType: {}
-        },
-        dashboardFilters: {
-          fromDate: '',
-          toDate: '',
-          status: '',
-          responsibleDept: '',
-          salesOwner: '',
-          customerType: '',
-          industry: ''
-        },
-        charts: {},
-        customerQuery: '',
-        customerFilters: { customerType: '' },
-        customers: { items: [], page: 1, pageSize: 25, total: 0, totalPages: 1 },
-        customerPager: { page: 1, pageSize: 25 },
-        customerForm: {},
-        projectFilters: { query: '', status: '', responsibleDept: '' },
-        projects: { items: [], page: 1, pageSize: 25, total: 0, totalPages: 1 },
-        projectPager: { page: 1, pageSize: 25 },
-        projectForm: {},
-        customerOptions: [],
-        libraries: [],
-        selectedLibrary: '',
-        libraryFiles: [],
-        userForm: { Email: '', Role: 'Sales', FullName: '', Department: '', IsActive: true },
-        settingsRows: [],
-        auditFilters: { query: '', action: '', actorEmail: '', page: 1, pageSize: 25 },
-        audit: { items: [], page: 1, pageSize: 25, total: 0, totalPages: 1 }
-      };
-    },
-    computed: {
-      navItems() {
-        const items = [
-          { page: 'dashboard', label: 'Dashboard', short: 'Home', icon: 'fa-chart-line' },
-          { page: 'customers', label: 'Customers', short: 'Cust', icon: 'fa-building' },
-          { page: 'projects', label: 'Projects', short: 'Proj', icon: 'fa-diagram-project' },
-          { page: 'catalogues', label: 'Catalogues', short: 'Files', icon: 'fa-folder-open' }
-        ];
-        if (this.permissions.canManageUsers) items.push({ page: 'users', label: 'Users Admin', short: 'Users', icon: 'fa-users-gear' });
-        if (this.permissions.canManageSettings) items.push({ page: 'settings', label: 'Settings', short: 'Set', icon: 'fa-gear' });
-        if (this.permissions.canViewAuditLogs) items.push({ page: 'audit', label: 'Audit Logs', short: 'Audit', icon: 'fa-shield-halved' });
-        return items;
-      },
-      mobileNavItems() {
-        return this.navItems.slice(0, 4);
-      },
-      pageTitle() {
-        const item = this.navItems.find(nav => nav.page === this.currentPage);
-        if (item) return item.label;
-        if (this.currentPage === 'customer-form') return this.customerForm.CustomerID ? 'Edit Customer' : 'New Customer';
-        if (this.currentPage === 'project-form') return this.projectForm.ProjectID ? 'Edit Project' : 'New Project';
-        return 'MATCHPOINT CRM';
-      },
-      dashboardCards() {
-        const kpis = this.dashboard.kpis || {};
-        return [
-          { label: 'Total Projects', value: this.number(kpis.totalProjects), icon: 'fa-diagram-project', className: 'bg-blue-50 text-blue-700' },
-          { label: 'Total Value', value: this.money(kpis.totalProjectValue), icon: 'fa-coins', className: 'bg-slate-100 text-slate-700' },
-          { label: 'Open Pipeline', value: this.money(kpis.openPipelineValue), icon: 'fa-arrow-trend-up', className: 'bg-amber-50 text-amber-700' },
-          { label: 'Expected Value', value: this.money(kpis.totalExpectedValue), icon: 'fa-bullseye', className: 'bg-blue-50 text-blue-700' },
-          { label: 'Won Projects', value: this.number(kpis.wonProjects), icon: 'fa-circle-check', className: 'bg-green-50 text-green-700' },
-          { label: 'Customers', value: this.number(kpis.totalCustomers), icon: 'fa-building', className: 'bg-slate-100 text-slate-700' }
-        ];
-      },
-      currentStatusFields() {
-        return this.statusFieldConfig[this.projectForm.Status] || [];
-      }
-    },
-    mounted() {
-      this.init();
-    },
-    methods: {
-      apiCall(method, ...args) {
-        return new Promise((resolve, reject) => {
-          const runner = google.script.run
-            .withSuccessHandler(response => {
-              if (response && response.success) resolve(response.data);
-              else reject(response || { code: 'UNKNOWN_ERROR', message: 'Unexpected response.' });
-            })
-            .withFailureHandler(error => {
-              reject({ code: 'UNKNOWN_ERROR', message: error && error.message ? error.message : String(error) });
-            });
-          runner[method](...args);
-        });
-      },
-      async rpc(method, ...args) {
-        this.loading = true;
-        try {
-          return await this.apiCall(method, ...args);
-        } catch (error) {
-          this.handleError(error);
-          throw error;
-        } finally {
-          this.loading = false;
-        }
-      },
-      async init() {
-        this.initialLoading = true;
-        try {
-          const data = await this.apiCall('getAuthData');
-          this.auth = data.user || {};
-          this.settings = data.settings || {};
-          this.permissions = data.permissions || {};
-          this.customerTypes = data.customerTypes || [];
-          this.priorities = data.priorities || ['Low', 'Medium', 'High', 'Critical'];
-          this.workflowStates = data.workflowStates || [];
-          this.statusFieldConfig = data.statusFieldConfig || {};
-          await this.loadUsers(false);
-          await this.loadDashboard();
-        } catch (error) {
-          if (error && (error.code === 'ACCESS_DENIED' || error.code === 'UNAUTHENTICATED')) {
-            this.accessDenied = true;
-            this.accessDeniedMessage = error.message || this.accessDeniedMessage;
-          } else {
-            this.handleError(error);
-          }
-        } finally {
-          this.initialLoading = false;
-        }
-      },
-      handleError(error) {
-        if (error && error.errors && error.errors.length) {
-          this.fieldErrors = {};
-          error.errors.forEach(item => {
-            this.fieldErrors[item.field] = item.message;
-          });
-        }
-        this.showToast('error', error && error.code ? error.code : 'Error', error && error.message ? error.message : 'Something went wrong.');
-      },
-      showToast(type, title, message) {
-        this.toast = { type, title, message };
-        window.setTimeout(() => {
-          this.toast = null;
-        }, 4500);
-      },
-      async navigate(page) {
-        this.currentPage = page;
-        this.mobileMenuOpen = false;
-        this.fieldErrors = {};
-        await this.refreshCurrent();
-      },
-      async refreshCurrent() {
-        if (this.currentPage === 'dashboard') return this.loadDashboard();
-        if (this.currentPage === 'customers') return this.loadCustomers(this.customers.page || 1);
-        if (this.currentPage === 'projects') return this.loadProjects(this.projects.page || 1);
-        if (this.currentPage === 'catalogues') return this.loadLibraries();
-        if (this.currentPage === 'users') return this.loadUsers(true);
-        if (this.currentPage === 'settings') return this.loadSettings();
-        if (this.currentPage === 'audit') return this.loadAudit(this.audit.page || 1);
-      },
-      statusName(code) {
-        const state = this.workflowStates.find(item => item.StateCode === code);
-        return state ? state.StateName : code;
-      },
-      statusClass(code) {
-        if (code === 'COMPLETED') return 'status-pill bg-green-50 text-green-700';
-        if (code === 'CANCELLED') return 'status-pill bg-red-50 text-red-700';
-        if (code === 'PROCUREMENT' || code === 'QUOTATION_SENT') return 'status-pill bg-amber-50 text-amber-700';
-        return 'status-pill bg-blue-50 text-blue-700';
-      },
-      money(value) {
-        return new Intl.NumberFormat('th-TH', { style: 'currency', currency: 'THB', maximumFractionDigits: 0 }).format(Number(value || 0));
-      },
-      number(value) {
-        return new Intl.NumberFormat('th-TH').format(Number(value || 0));
-      },
-      fieldError(field) {
-        return this.fieldErrors[field] || '';
-      },
-      fieldClass(field) {
-        return ['field', this.fieldErrors[field] ? 'field-error' : ''];
-      },
-      resetDashboardFilters() {
-        this.dashboardFilters = { fromDate: '', toDate: '', status: '', responsibleDept: '', salesOwner: '', customerType: '', industry: '' };
-        this.loadDashboard();
-      },
-      async loadDashboard() {
-        this.dashboard = await this.rpc('getDashboard', this.dashboardFilters);
-        this.$nextTick(() => this.renderCharts());
-      },
-      chartDataFromObject(object) {
-        const labels = Object.keys(object || {});
-        const values = labels.map(label => Number(object[label] || 0));
-        return { labels: labels.length ? labels.map(label => this.statusName(label)) : ['No data'], values: values.length ? values : [0] };
-      },
-      renderCharts() {
-        this.renderChart('statusCountChart', 'bar', this.dashboard.projectCountByStatus, 'Projects');
-        this.renderChart('statusValueChart', 'bar', this.dashboard.projectValueByStatus, 'Value');
-        this.renderChart('customerTypeChart', 'doughnut', this.dashboard.customerCountByType, 'Customers');
-      },
-      renderChart(id, type, source, label) {
-        const el = document.getElementById(id);
-        if (!el || !window.Chart) return;
-        if (this.charts[id]) this.charts[id].destroy();
-        const data = this.chartDataFromObject(source);
-        this.charts[id] = new Chart(el, {
-          type,
-          data: {
-            labels: data.labels,
-            datasets: [{
-              label,
-              data: data.values,
-              backgroundColor: ['#2563eb', '#16a34a', '#d97706', '#dc2626', '#7c3aed', '#0891b2', '#475569'],
-              borderColor: '#ffffff',
-              borderWidth: type === 'doughnut' ? 2 : 0
-            }]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { legend: { position: 'bottom' } },
-            scales: type === 'doughnut' ? {} : { y: { beginAtZero: true } }
-          }
-        });
-      },
-      async loadCustomers(page) {
-        this.customerPager.page = page || this.customerPager.page || 1;
-        this.customers = await this.rpc('searchCustomers', this.customerQuery, {
-          page: this.customerPager.page,
-          pageSize: this.customerPager.pageSize,
-          customerType: this.customerFilters.customerType
-        });
-      },
-      async loadCustomerOptions() {
-        const result = await this.rpc('searchCustomers', '', { page: 1, pageSize: 100 });
-        this.customerOptions = result.items || [];
-      },
-      newCustomer() {
-        this.fieldErrors = {};
-        this.customerForm = { CustomerType: '', OwnerEmail: this.auth.email, RowVersion: '' };
-        if (this.permissions.canViewAll && !this.users.length) this.loadUsers(false);
-        this.currentPage = 'customer-form';
-      },
-      async editCustomer(customerId) {
-        this.fieldErrors = {};
-        const customer = await this.rpc('getCustomer', customerId);
-        this.customerForm = Object.assign({}, customer);
-        if (this.permissions.canViewAll && !this.users.length) await this.loadUsers(false);
-        this.currentPage = 'customer-form';
-      },
-      async saveCustomerForm() {
-        this.fieldErrors = {};
-        const saved = await this.rpc('saveCustomer', this.customerForm);
-        this.customerForm = Object.assign({}, saved);
-        this.showToast('success', 'Saved', 'Customer saved successfully.');
-        this.currentPage = 'customers';
-        await this.loadCustomers(1);
-      },
-      async removeCustomer(customerId) {
-        if (!confirm('Delete this customer?')) return;
-        await this.rpc('deleteCustomer', customerId);
-        this.showToast('success', 'Deleted', 'Customer deleted.');
-        await this.loadCustomers(this.customers.page || 1);
-      },
-      async loadProjects(page) {
-        this.projectPager.page = page || this.projectPager.page || 1;
-        this.projects = await this.rpc('searchProjects', this.projectFilters, {
-          page: this.projectPager.page,
-          pageSize: this.projectPager.pageSize
-        });
-      },
-      async newProject() {
-        this.fieldErrors = {};
-        await Promise.all([this.loadCustomerOptions(), this.loadUsers(false)]);
-        this.projectForm = {
-          CustomerID: '',
-          ProjectName: '',
-          ResponsibleDept: '',
-          AssignedSalesEmail: this.auth.email,
-          ProjectValue: 0,
-          Status: this.workflowStates[0] ? this.workflowStates[0].StateCode : 'LEAD_CONTACT',
-          StatusDetails: {},
-          ExpectedCloseDate: '',
-          Priority: 'Medium',
-          Probability: 20,
-          Notes: ''
-        };
-        this.ensureStatusDetails();
-        this.currentPage = 'project-form';
-      },
-      async editProject(projectId) {
-        this.fieldErrors = {};
-        await Promise.all([this.loadCustomerOptions(), this.loadUsers(false)]);
-        const project = await this.rpc('getProject', projectId);
-        this.projectForm = Object.assign({}, project, {
-          StatusDetails: project.StatusDetailsObject || this.parseJson(project.StatusDetails)
-        });
-        this.ensureStatusDetails();
-        this.currentPage = 'project-form';
-      },
-      ensureStatusDetails() {
-        if (!this.projectForm.StatusDetails) this.projectForm.StatusDetails = {};
-        this.currentStatusFields.forEach(field => {
-          if (this.projectForm.StatusDetails[field.key] === undefined) this.projectForm.StatusDetails[field.key] = '';
-        });
-      },
-      parseJson(value) {
-        try {
-          return value ? JSON.parse(value) : {};
-        } catch (error) {
-          return {};
-        }
-      },
-      async saveProjectForm() {
-        this.fieldErrors = {};
-        const payload = Object.assign({}, this.projectForm, {
-          StatusDetails: Object.assign({}, this.projectForm.StatusDetails)
-        });
-        const saved = await this.rpc('saveProject', payload);
-        this.projectForm = Object.assign({}, saved, { StatusDetails: saved.StatusDetailsObject || {} });
-        this.showToast('success', 'Saved', 'Project saved successfully.');
-        this.currentPage = 'projects';
-        await this.loadProjects(1);
-      },
-      async removeProject(projectId) {
-        if (!confirm('Delete this project?')) return;
-        await this.rpc('deleteProject', projectId);
-        this.showToast('success', 'Deleted', 'Project deleted.');
-        await this.loadProjects(this.projects.page || 1);
-      },
-      async loadLibraries() {
-        this.libraries = await this.rpc('getConfiguredLibraries');
-        if (!this.selectedLibrary && this.libraries.length) this.selectedLibrary = this.libraries[0].LibraryKey;
-        if (this.selectedLibrary) await this.loadLibraryFiles();
-      },
-      async selectLibrary(libraryKey) {
-        this.selectedLibrary = libraryKey;
-        await this.loadLibraryFiles();
-      },
-      async loadLibraryFiles() {
-        if (!this.selectedLibrary) return;
-        const result = await this.rpc('getLibraryFiles', this.selectedLibrary);
-        this.libraryFiles = result.files || [];
-      },
-      async loadUsers(showToast) {
-        this.users = await this.rpc('getUsers');
-        if (showToast) this.showToast('success', 'Loaded', 'Users loaded.');
-      },
-      editUser(person) {
-        this.userForm = Object.assign({}, person);
-      },
-      async saveUserForm() {
-        await this.rpc('saveUser', this.userForm);
-        this.userForm = { Email: '', Role: 'Sales', FullName: '', Department: '', IsActive: true };
-        this.showToast('success', 'Saved', 'User saved successfully.');
-        await this.loadUsers(false);
-      },
-      async removeUser(email) {
-        if (!confirm('Deactivate this user?')) return;
-        await this.rpc('deleteUser', email);
-        this.showToast('success', 'Updated', 'User deactivated.');
-        await this.loadUsers(false);
-      },
-      async loadSettings() {
-        this.settingsRows = await this.rpc('getSettings');
-      },
-      async saveSettingRow(setting) {
-        await this.rpc('saveSetting', setting.Key, setting.Value);
-        this.showToast('success', 'Saved', 'Setting saved.');
-        await this.loadSettings();
-      },
-      async loadAudit(page) {
-        this.auditFilters.page = page || this.auditFilters.page || 1;
-        this.audit = await this.rpc('getAuditLogs', this.auditFilters);
-      }
+const RecordList = {
+  props: ['title', 'rows', 'fields'],
+  template: `
+    <div class="panel">
+      <div class="border-b border-slate-200 p-4"><h2 class="text-sm font-black text-slate-900">{{ title }}</h2></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th v-for="field in fields" :key="field">{{ field }}</th></tr></thead>
+          <tbody>
+            <tr v-for="(row, index) in rows" :key="index"><td v-for="field in fields" :key="field">{{ format(row[field]) }}</td></tr>
+            <tr v-if="!rows || !rows.length"><td :colspan="fields && fields.length ? fields.length : 1" class="text-center text-slate-500">No records</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>`,
+  methods: {
+    format(value) {
+      if (value === null || value === undefined) return '';
+      if (typeof value === 'number') return new Intl.NumberFormat('th-TH').format(value);
+      if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+      return String(value);
     }
-  }).mount('#app');
+  }
+};
+
+Vue.createApp({
+  components: { RecordList },
+  template: '#crm-template',
+  data() {
+    return {
+      loading: false,
+      authChecked: false,
+      showSetup: false,
+      mobileMenuOpen: false,
+      sessionToken: localStorage.getItem('mpcrm.session') || '',
+      loginForm: { username: '', password: '' },
+      setupForm: { email: '', username: 'admin', password: '' },
+      auth: {},
+      settings: {},
+      permissions: {},
+      schemas: {},
+      lookups: { users: [], pipelineStages: [] },
+      currentPage: 'dashboard',
+      activeEntity: 'customers',
+      entityRows: { items: [], page: 1, pageSize: 25, total: 0, totalPages: 1 },
+      entityFilters: { query: '', page: 1, pageSize: 25 },
+      recordForm: {},
+      fieldErrors: {},
+      dashboardFilters: { fromDate: '', toDate: '', stage: '', ownerUserId: '' },
+      dashboard: { kpis: {}, pipelineByStage: {}, valueByStage: {}, collectionByMonth: {}, topOpportunities: [], overdueInvoices: [] },
+      charts: {},
+      reportType: 'pipeline',
+      reportFilters: { query: '', fromDate: '', toDate: '' },
+      report: { headers: [], rows: [] },
+      lastExport: {},
+      catalogues: [],
+      activeCatalogue: '',
+      catalogueFiles: { library: {}, files: [] },
+      migration: { sourceSpreadsheetId: '', sourceSheetName: '' },
+      migrationMapping: [],
+      migrationResult: '',
+      health: { summary: {}, checks: [] },
+      tests: { tests: [] },
+      settingsRows: [],
+      users: [],
+      userForm: { Email: '', Username: '', FullName: '', Role: 'Sales', Department: '', Password: '', IsActive: true, MustChangePassword: true },
+      auditFilters: { query: '', page: 1, pageSize: 25 },
+      audit: { items: [] },
+      toast: null
+    };
+  },
+  computed: {
+    navItems() {
+      const entityItems = Object.keys(this.schemas).map(name => ({ page: 'entity:' + name, label: this.schemas[name].label, icon: this.entityIcon(name) }));
+      const items = [{ page: 'dashboard', label: 'Dashboard', icon: 'fa-chart-line' }, ...entityItems, { page: 'reports', label: 'Reports', icon: 'fa-file-lines' }, { page: 'catalogues', label: 'Catalogues', icon: 'fa-folder-open' }];
+      if (this.permissions.canRunMigration) items.push({ page: 'migration', label: 'Migration', icon: 'fa-file-import' });
+      if (this.permissions.canManageSettings) items.push({ page: 'settings', label: 'Settings', icon: 'fa-gear' }, { page: 'health', label: 'System Health', icon: 'fa-heart-pulse' });
+      if (this.permissions.canManageUsers) items.push({ page: 'users', label: 'Users', icon: 'fa-users-gear' });
+      if (this.permissions.canRunTests) items.push({ page: 'tests', label: 'Tests', icon: 'fa-vial-circle-check' });
+      if (this.permissions.canViewAuditLogs) items.push({ page: 'audit', label: 'Audit Logs', icon: 'fa-shield-halved' });
+      return items;
+    },
+    activeSchema() {
+      return this.schemas[this.activeEntity] || { label: '', fields: [], key: 'id', required: [], numeric: [], booleans: [], enums: {} };
+    },
+    pageTitle() {
+      if (this.currentPage === 'entity' || this.currentPage === 'form') return this.activeSchema.label;
+      const item = this.navItems.find(nav => nav.page === this.currentPage);
+      return item ? item.label : 'MATCHPOINT CRM';
+    },
+    tableFields() {
+      const skip = ['CreatedBy', 'UpdatedBy', 'PreviousValue', 'NewValue'];
+      return (this.activeSchema.fields || []).filter(field => skip.indexOf(field) === -1).slice(0, 7);
+    },
+    editableFields() {
+      const system = [this.activeSchema.key, 'CreatedAt', 'CreatedBy', 'UpdatedAt', 'UpdatedBy', 'RecordVersion', 'IsDeleted', 'ExternalSourceKey', 'MigrationRunID'];
+      return (this.activeSchema.fields || []).filter(field => system.indexOf(field) === -1);
+    },
+    dashboardCards() {
+      const k = this.dashboard.kpis || {};
+      return [
+        { label: 'Customers', value: this.number(k.customers) },
+        { label: 'Opportunities', value: this.number(k.opportunities) },
+        { label: 'Pipeline', value: this.money(k.totalPipelineValue) },
+        { label: 'Weighted', value: this.money(k.weightedPipelineValue) },
+        { label: 'Outstanding', value: this.money(k.outstandingAmount) },
+        { label: 'Overdue', value: this.number(k.overdueInvoices) }
+      ];
+    }
+  },
+  mounted() {
+    if (this.sessionToken) this.init().catch(() => { this.sessionToken = ''; localStorage.removeItem('mpcrm.session'); });
+  },
+  methods: {
+    rawApiCall(method, ...args) {
+      return new Promise((resolve, reject) => {
+        const runner = google.script.run
+          .withSuccessHandler(response => response && response.success ? resolve(response.data) : reject(response || { message: 'Unexpected response.' }))
+          .withFailureHandler(error => reject({ message: error && error.message ? error.message : String(error) }));
+        runner[method](...args);
+      });
+    },
+    apiCall(method, ...args) {
+      return this.rawApiCall(method, this.sessionToken, ...args);
+    },
+    async rpc(method, ...args) {
+      this.loading = true;
+      try {
+        return await this.apiCall(method, ...args);
+      } catch (error) {
+        this.handleError(error);
+        throw error;
+      } finally {
+        this.loading = false;
+      }
+    },
+    async login() {
+      this.loading = true;
+      try {
+        const result = await this.rawApiCall('login', this.loginForm.username, this.loginForm.password);
+        this.sessionToken = result.sessionToken;
+        localStorage.setItem('mpcrm.session', this.sessionToken);
+        await this.init();
+      } catch (error) {
+        this.handleError(error);
+      } finally {
+        this.loading = false;
+      }
+    },
+    async setupDatabase() {
+      this.loading = true;
+      try {
+        await this.rawApiCall('setupDatabase', this.sessionToken || '', this.setupForm.email, this.setupForm.username, this.setupForm.password);
+        this.showToast('success', 'Database Ready', 'Setup completed.');
+      } catch (error) {
+        this.handleError(error);
+      } finally {
+        this.loading = false;
+      }
+    },
+    async init() {
+      const data = await this.apiCall('getAuthData');
+      this.auth = data.user || {};
+      this.settings = data.settings || {};
+      this.permissions = data.permissions || {};
+      this.schemas = data.schemas || {};
+      this.lookups = data.lookups || {};
+      this.authChecked = true;
+      await this.loadDashboard();
+    },
+    async logout() {
+      try { await this.apiCall('logout'); } catch (error) {}
+      localStorage.removeItem('mpcrm.session');
+      this.sessionToken = '';
+      this.authChecked = false;
+      this.loginForm.password = '';
+    },
+    async navigate(page) {
+      this.mobileMenuOpen = false;
+      this.fieldErrors = {};
+      if (page.indexOf('entity:') === 0) {
+        this.activeEntity = page.split(':')[1];
+        this.currentPage = 'entity';
+        await this.loadEntity(1);
+        return;
+      }
+      this.currentPage = page;
+      await this.refreshCurrent();
+    },
+    async refreshCurrent() {
+      if (this.currentPage === 'dashboard') return this.loadDashboard();
+      if (this.currentPage === 'entity') return this.loadEntity(this.entityRows.page || 1);
+      if (this.currentPage === 'reports') return this.loadReport();
+      if (this.currentPage === 'catalogues') return this.loadCatalogues();
+      if (this.currentPage === 'migration') return this.loadMigrationMapping();
+      if (this.currentPage === 'health') return this.loadHealth();
+      if (this.currentPage === 'settings') return this.loadSettings();
+      if (this.currentPage === 'users') return this.loadUsers();
+      if (this.currentPage === 'audit') return this.loadAudit(1);
+    },
+    async loadDashboard() {
+      this.dashboard = await this.rpc('getDashboard', this.dashboardFilters);
+      this.$nextTick(() => this.renderCharts());
+    },
+    resetDashboard() {
+      this.dashboardFilters = { fromDate: '', toDate: '', stage: '', ownerUserId: '' };
+      this.loadDashboard();
+    },
+    async loadEntity(page) {
+      this.entityFilters.page = page || 1;
+      this.entityRows = await this.rpc('listEntity', this.activeEntity, this.entityFilters);
+    },
+    newRecord() {
+      this.recordForm = {};
+      this.editableFields.forEach(field => {
+        if (field === 'OwnerUserID' || field === 'AssignedToUserID') this.recordForm[field] = this.auth.userId;
+        else if (this.fieldType(field) === 'checkbox') this.recordForm[field] = false;
+      });
+      this.currentPage = 'form';
+    },
+    async editRecord(id) {
+      this.recordForm = await this.rpc('getEntity', this.activeEntity, id);
+      this.currentPage = 'form';
+    },
+    async saveRecord() {
+      this.fieldErrors = {};
+      const saved = await this.rpc('saveEntity', this.activeEntity, this.recordForm);
+      this.recordForm = saved;
+      this.showToast('success', 'Saved', 'Record saved.');
+      this.currentPage = 'entity';
+      await this.loadEntity(this.entityRows.page || 1);
+    },
+    async removeRecord(id) {
+      if (!confirm('Delete this record?')) return;
+      await this.rpc('deleteEntity', this.activeEntity, id);
+      this.showToast('success', 'Deleted', 'Record deleted.');
+      await this.loadEntity(this.entityRows.page || 1);
+    },
+    async loadReport() {
+      this.report = await this.rpc('getReport', this.reportType, this.reportFilters);
+    },
+    async exportReport() {
+      this.lastExport = await this.rpc('exportReportXlsx', this.reportType, this.reportFilters);
+      this.showToast('success', 'Export Ready', this.lastExport.fileName || 'Report exported.');
+    },
+    async loadCatalogues() {
+      this.catalogues = await this.rpc('getCatalogues');
+      if (this.catalogues.length && !this.activeCatalogue) {
+        await this.openCatalogue(this.catalogues[0].LibraryKey);
+      }
+    },
+    async openCatalogue(key) {
+      this.activeCatalogue = key;
+      this.catalogueFiles = await this.rpc('getCatalogueFiles', key);
+    },
+    async loadMigrationMapping() {
+      this.migrationMapping = await this.rpc('getMigrationMapping');
+    },
+    async previewMigration() {
+      this.migrationResult = JSON.stringify(await this.rpc('previewMigrationFromSpreadsheet', this.migration.sourceSpreadsheetId, this.migration.sourceSheetName), null, 2);
+      await this.loadMigrationMapping();
+    },
+    async importMigration() {
+      if (!confirm('Import source rows into CRM?')) return;
+      this.migrationResult = JSON.stringify(await this.rpc('importMigrationFromSpreadsheet', this.migration.sourceSpreadsheetId, this.migration.sourceSheetName), null, 2);
+    },
+    async loadHealth() {
+      this.health = await this.rpc('healthCheck');
+    },
+    async installTriggers() {
+      await this.rpc('installTriggers');
+      await this.loadHealth();
+    },
+    async removeTriggers() {
+      await this.rpc('removeTriggers');
+      await this.loadHealth();
+    },
+    async runTests() {
+      this.tests = await this.rpc('runAllTests');
+    },
+    async loadSettings() {
+      this.settingsRows = await this.rpc('getSettings');
+    },
+    async saveSetting(setting) {
+      await this.rpc('saveSetting', setting.Key, setting.Value);
+      this.showToast('success', 'Saved', 'Setting saved.');
+    },
+    async loadUsers() {
+      this.users = await this.rpc('getUsers');
+    },
+    editUser(person) {
+      this.fieldErrors = {};
+      this.userForm = Object.assign({}, person, {
+        Password: '',
+        IsActive: !!person.IsActive,
+        MustChangePassword: !!person.MustChangePassword
+      });
+    },
+    resetUserForm() {
+      this.fieldErrors = {};
+      this.userForm = { Email: '', Username: '', FullName: '', Role: 'Sales', Department: '', Password: '', IsActive: true, MustChangePassword: true };
+    },
+    async saveUser() {
+      await this.rpc('saveUser', this.userForm);
+      this.resetUserForm();
+      await this.loadUsers();
+      await this.init();
+      this.showToast('success', 'Saved', 'User saved.');
+    },
+    async deactivateUser(email) {
+      if (!confirm('Deactivate this user?')) return;
+      await this.rpc('deleteUser', email);
+      await this.loadUsers();
+      this.showToast('success', 'Updated', 'User deactivated.');
+    },
+    async loadAudit(page) {
+      this.auditFilters.page = page || 1;
+      this.audit = await this.rpc('getAuditLogs', this.auditFilters);
+    },
+    fieldType(field) {
+      if ((this.activeSchema.booleans || []).indexOf(field) !== -1) return 'checkbox';
+      if ((this.activeSchema.numeric || []).indexOf(field) !== -1) return 'number';
+      if (/Date$|At$/.test(field) && !/CreatedAt|UpdatedAt/.test(field)) return 'date';
+      if (/Notes|Description|Terms|Address|Message/.test(field)) return 'textarea';
+      return 'text';
+    },
+    fieldOptions(field) {
+      const enums = this.activeSchema.enums || {};
+      if (enums[field]) return enums[field].map(value => ({ value, label: this.labelFor(field, value) }));
+      if (/UserID$/.test(field) || field === 'ApprovedByUserID') return (this.lookups.users || []).map(user => ({ value: user.UserID, label: user.FullName || user.Email }));
+      return [];
+    },
+    labelFor(field, value) {
+      if (field === 'Stage') {
+        const stage = (this.lookups.pipelineStages || []).find(item => item.StageCode === value);
+        return stage ? stage.StageName : value;
+      }
+      return value;
+    },
+    isRequired(field) {
+      return (this.activeSchema.required || []).indexOf(field) !== -1;
+    },
+    fieldError(field) {
+      return this.fieldErrors[field] || '';
+    },
+    fieldClass(field) {
+      return ['field', this.fieldErrors[field] ? 'field-error' : ''];
+    },
+    displayValue(value) {
+      if (typeof value === 'number') return this.number(value);
+      if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+      return value === null || value === undefined ? '' : String(value);
+    },
+    number(value) {
+      return new Intl.NumberFormat('th-TH').format(Number(value || 0));
+    },
+    money(value) {
+      return new Intl.NumberFormat('th-TH', { style: 'currency', currency: 'THB', maximumFractionDigits: 0 }).format(Number(value || 0));
+    },
+    chartData(object) {
+      const labels = Object.keys(object || {});
+      return { labels: labels.length ? labels : ['No data'], values: labels.length ? labels.map(label => Number(object[label] || 0)) : [0] };
+    },
+    renderCharts() {
+      this.renderChart('pipelineChart', 'bar', this.dashboard.pipelineByStage || {}, 'Count');
+      this.renderChart('valueChart', 'bar', this.dashboard.valueByStage || {}, 'Value');
+      this.renderChart('collectionChart', 'line', this.dashboard.collectionByMonth || {}, 'Collected');
+    },
+    renderChart(id, type, source, label) {
+      const el = document.getElementById(id);
+      if (!el || !window.Chart) return;
+      if (this.charts[id]) this.charts[id].destroy();
+      const data = this.chartData(source);
+      this.charts[id] = new Chart(el, {
+        type,
+        data: { labels: data.labels, datasets: [{ label, data: data.values, backgroundColor: '#2563eb', borderColor: '#2563eb', borderWidth: 2 }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+      });
+    },
+    entityIcon(name) {
+      const icons = { customers: 'fa-building', contacts: 'fa-address-book', opportunities: 'fa-bullseye', activities: 'fa-list-check', products: 'fa-boxes-stacked', quotations: 'fa-file-signature', salesOrders: 'fa-cart-shopping', invoices: 'fa-file-invoice-dollar', payments: 'fa-money-bill-wave', paymentAllocations: 'fa-share-nodes', notifications: 'fa-bell' };
+      return icons[name] || 'fa-table';
+    },
+    handleError(error) {
+      this.fieldErrors = {};
+      if (error && error.errors) error.errors.forEach(item => { this.fieldErrors[item.field] = item.message; });
+      this.showToast('error', error && error.code ? error.code : 'Error', error && error.message ? error.message : 'Something went wrong.');
+    },
+    showToast(type, title, message) {
+      this.toast = { type, title, message };
+      window.setTimeout(() => { this.toast = null; }, 4500);
+    }
+  }
+}).mount('#app');
 </script>

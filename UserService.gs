@@ -75,24 +75,38 @@ var UserService = (function () {
   function sanitizeUser_(userRecord, includeInactive) {
     if (!includeInactive && !UtilService.asBoolean(userRecord.IsActive)) return null;
     return {
+      UserID: userRecord.UserID || '',
       Email: UtilService.coerceEmail(userRecord.Email),
+      Username: AuthService.normalizeUsername(userRecord.Username),
       Role: userRecord.Role,
       FullName: userRecord.FullName || '',
       Department: userRecord.Department || '',
       IsActive: UtilService.asBoolean(userRecord.IsActive),
+      MustChangePassword: UtilService.asBoolean(userRecord.MustChangePassword),
+      PasswordUpdatedAt: userRecord.PasswordUpdatedAt || '',
+      LastLoginAt: userRecord.LastLoginAt || '',
       CreatedAt: userRecord.CreatedAt || '',
       UpdatedAt: userRecord.UpdatedAt || '',
       CreatedBy: userRecord.CreatedBy || '',
-      UpdatedBy: userRecord.UpdatedBy || ''
+      UpdatedBy: userRecord.UpdatedBy || '',
+      RecordVersion: UtilService.toNumber(userRecord.RecordVersion, 0)
     };
   }
 
-  function validateUser_(userData) {
+  function validateUser_(userData, existingUser) {
     var errors = [];
     var email = UtilService.coerceEmail(userData && userData.Email);
+    var username = AuthService.normalizeUsername(userData && userData.Username);
     if (!email || email.indexOf('@') === -1) errors.push({ field: 'Email', message: 'Valid email is required.' });
+    if (username && !/^[a-z0-9._-]{3,40}$/.test(username)) {
+      errors.push({ field: 'Username', message: 'Username must be 3-40 characters and use letters, numbers, dot, underscore, or dash.' });
+    }
     if ([CRM_CONFIG.ROLES.ADMIN, CRM_CONFIG.ROLES.MANAGER, CRM_CONFIG.ROLES.SALES].indexOf(userData && userData.Role) === -1) {
       errors.push({ field: 'Role', message: 'Role must be Admin, Manager, or Sales.' });
+    }
+    if ((!existingUser || UtilService.isBlank(existingUser.PasswordHash) || UtilService.isBlank(existingUser.PasswordSalt))
+      && UtilService.isBlank(userData.Password)) {
+      errors.push({ field: 'Password', message: 'Password is required for new users.' });
     }
     if (errors.length) throw UtilService.validationError(errors);
   }
@@ -116,6 +130,7 @@ var UserService = (function () {
     return DbService.readTable(CRM_CONFIG.SHEETS.USERS).filter(function (record) {
       return record.Role === CRM_CONFIG.ROLES.ADMIN
         && UtilService.asBoolean(record.IsActive)
+        && !UtilService.asBoolean(record.IsDeleted)
         && UtilService.coerceEmail(record.Email) !== UtilService.coerceEmail(excludingEmail);
     }).length;
   }
@@ -123,32 +138,51 @@ var UserService = (function () {
   function saveUser(user, userData) {
     AuthService.assertPermission(user, [CRM_CONFIG.ROLES.ADMIN]);
     userData = userData || {};
-    validateUser_(userData);
     var email = UtilService.coerceEmail(userData.Email);
+    var username = AuthService.normalizeUsername(userData.Username)
+      || AuthService.normalizeUsername(email.split('@')[0]);
     var now = UtilService.nowIso();
     var before = null;
     var after = null;
 
     DbService.withScriptLock(function () {
       var found = DbService.findRowById(CRM_CONFIG.SHEETS.USERS, 'Email', email);
+      validateUser_(userData, found ? found.record : null);
+      var usernameOwner = AuthService.getUserByUsername(username);
+      if (usernameOwner && UtilService.coerceEmail(usernameOwner.Email) !== email) {
+        throw UtilService.validationError([{ field: 'Username', message: 'Username is already in use.' }]);
+      }
       if (found && found.record.Role === CRM_CONFIG.ROLES.ADMIN && !UtilService.asBoolean(userData.IsActive) && activeAdminCount_(email) === 0) {
         throw UtilService.validationError([{ field: 'IsActive', message: 'At least one active Admin is required.' }]);
       }
       var patch = {
+        UserID: found && !UtilService.isBlank(found.record.UserID) ? found.record.UserID : DbService.generateUuid('USER'),
         Email: email,
+        Username: username,
         Role: userData.Role,
         FullName: userData.FullName || '',
         Department: userData.Department || '',
         IsActive: userData.IsActive === undefined ? true : UtilService.asBoolean(userData.IsActive),
+        MustChangePassword: userData.MustChangePassword === undefined
+          ? (!found || UtilService.isBlank(found.record.PasswordHash))
+          : UtilService.asBoolean(userData.MustChangePassword),
         UpdatedAt: now,
-        UpdatedBy: user.email
+        UpdatedBy: user.email,
+        IsDeleted: false
       };
+      if (!UtilService.isBlank(userData.Password)) {
+        var passwordFields = AuthService.makePasswordFields(userData.Password, userData.MustChangePassword);
+        Object.keys(passwordFields).forEach(function (key) {
+          patch[key] = passwordFields[key];
+        });
+      }
       if (found) {
         before = found.record;
         after = DbService.updateRecordById(CRM_CONFIG.SHEETS.USERS, 'Email', email, patch, null);
       } else {
         patch.CreatedAt = now;
         patch.CreatedBy = user.email;
+        patch.RecordVersion = 1;
         after = DbService.appendRecord(CRM_CONFIG.SHEETS.USERS, patch);
       }
     });
@@ -173,6 +207,7 @@ var UserService = (function () {
       before = found.record;
       after = DbService.updateRecordById(CRM_CONFIG.SHEETS.USERS, 'Email', targetEmail, {
         IsActive: false,
+        MustChangePassword: true,
         UpdatedAt: UtilService.nowIso(),
         UpdatedBy: user.email
       }, null);

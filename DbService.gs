@@ -52,6 +52,34 @@ var DbService = (function () {
       });
   }
 
+  function getHeaderMap(sheet) {
+    var headers = getHeaders(sheet);
+    var map = {};
+    headers.forEach(function (header, index) {
+      map[header] = index + 1;
+    });
+    return map;
+  }
+
+  function validateRequiredHeaders(sheetName) {
+    var sheet = getSheet(sheetName);
+    var headers = getHeaders(sheet);
+    var missing = [];
+    (CRM_CONFIG.HEADERS[sheetName] || []).forEach(function (header) {
+      if (headers.indexOf(header) === -1) missing.push(header);
+    });
+    if (missing.length) {
+      throw UtilService.createError(
+        CRM_CONFIG.ERROR_CODES.SHEET_ERROR,
+        'Sheet "' + sheetName + '" is missing required headers: ' + missing.join(', ') + '.',
+        missing.map(function (header) {
+          return { field: header, message: 'Missing header.' };
+        })
+      );
+    }
+    return true;
+  }
+
   function rowToObject(headers, row) {
     var output = {};
     headers.forEach(function (header, index) {
@@ -61,6 +89,24 @@ var DbService = (function () {
         : value;
     });
     return output;
+  }
+
+  function hasMeaningfulValue_(row) {
+    return row.some(function (value) {
+      if (value === false || value === null || value === undefined) return false;
+      if (Object.prototype.toString.call(value) === '[object Date]') return true;
+      return String(value).trim() !== '';
+    });
+  }
+
+  function getLastMeaningfulRow_(sheet, headers) {
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2 || headers.length === 0) return 1;
+    var rows = sheet.getRange(2, 1, lastRow - 1, headers.length).getValues();
+    for (var i = rows.length - 1; i >= 0; i--) {
+      if (hasMeaningfulValue_(rows[i])) return i + 2;
+    }
+    return 1;
   }
 
   function objectToRow(headers, object) {
@@ -77,13 +123,11 @@ var DbService = (function () {
     if (lastRow < 2 || headers.length === 0) return [];
     var rows = sheet.getRange(2, 1, lastRow - 1, headers.length).getValues();
     return rows
+      .filter(function (row) {
+        return hasMeaningfulValue_(row);
+      })
       .map(function (row) {
         return rowToObject(headers, row);
-      })
-      .filter(function (record) {
-        return headers.some(function (header) {
-          return !UtilService.isBlank(record[header]);
-        });
       });
   }
 
@@ -121,8 +165,24 @@ var DbService = (function () {
     var sheet = getSheet(sheetName);
     var headers = getHeaders(sheet);
     var row = objectToRow(headers, record);
-    sheet.getRange(sheet.getLastRow() + 1, 1, 1, headers.length).setValues([row]);
+    var nextRow = Math.max(2, getLastMeaningfulRow_(sheet, headers) + 1);
+    sheet.getRange(nextRow, 1, 1, headers.length).setValues([row]);
     return rowToObject(headers, row);
+  }
+
+  function appendRecords(sheetName, records) {
+    records = records || [];
+    if (!records.length) return [];
+    var sheet = getSheet(sheetName);
+    var headers = getHeaders(sheet);
+    var rows = records.map(function (record) {
+      return objectToRow(headers, record);
+    });
+    var nextRow = Math.max(2, getLastMeaningfulRow_(sheet, headers) + 1);
+    sheet.getRange(nextRow, 1, rows.length, headers.length).setValues(rows);
+    return rows.map(function (row) {
+      return rowToObject(headers, row);
+    });
   }
 
   function updateRecordById(sheetName, keyColumn, id, patch, expectedRowVersion) {
@@ -131,8 +191,9 @@ var DbService = (function () {
 
     var current = found.record;
     var headers = found.headers;
-    if (headers.indexOf('RowVersion') !== -1 && !UtilService.isBlank(expectedRowVersion)) {
-      var currentVersion = Number(current.RowVersion || 0);
+    var versionField = headers.indexOf('RecordVersion') !== -1 ? 'RecordVersion' : (headers.indexOf('RowVersion') !== -1 ? 'RowVersion' : '');
+    if (versionField && !UtilService.isBlank(expectedRowVersion)) {
+      var currentVersion = Number(current[versionField] || 0);
       var expectedVersion = Number(expectedRowVersion);
       if (currentVersion !== expectedVersion) {
         throw UtilService.createError(
@@ -149,8 +210,8 @@ var DbService = (function () {
     Object.keys(patch || {}).forEach(function (key) {
       if (headers.indexOf(key) !== -1) updated[key] = patch[key];
     });
-    if (headers.indexOf('RowVersion') !== -1) {
-      updated.RowVersion = Number(current.RowVersion || 0) + 1;
+    if (versionField) {
+      updated[versionField] = Number(current[versionField] || 0) + 1;
     }
 
     found.sheet.getRange(found.rowNumber, 1, 1, headers.length).setValues([objectToRow(headers, updated)]);
@@ -163,18 +224,18 @@ var DbService = (function () {
     return updateRecordById(sheetName, keyColumn, id, softPatch, null);
   }
 
-  function generateId(prefix, sheetName, keyColumn) {
-    var ym = Utilities.formatDate(new Date(), UtilService.getTimezone(), 'yyMM');
-    var base = prefix + '-' + ym + '-';
-    var max = 0;
-    readTable(sheetName).forEach(function (record) {
-      var value = String(record[keyColumn] || '');
-      if (value.indexOf(base) === 0) {
-        var numericPart = Number(value.replace(base, ''));
-        if (!isNaN(numericPart) && numericPart > max) max = numericPart;
-      }
-    });
-    return base + UtilService.padNumber(max + 1, 4);
+  function generateUuid(prefix) {
+    return String(prefix || 'ID') + '-' + Utilities.getUuid();
+  }
+
+  function generateDocumentNumber(prefix) {
+    var currentDate = new Date();
+    var ym = Utilities.formatDate(currentDate, UtilService.getTimezone(), 'yyyyMM');
+    var propertyKey = 'RUNNING_NUMBER_' + String(prefix || 'DOC') + '_' + ym;
+    var properties = PropertiesService.getScriptProperties();
+    var next = Number(properties.getProperty(propertyKey) || 0) + 1;
+    properties.setProperty(propertyKey, String(next));
+    return String(prefix || 'DOC') + '-' + ym + '-' + UtilService.padNumber(next, 4);
   }
 
   function clearDataRows(sheetName) {
@@ -187,7 +248,13 @@ var DbService = (function () {
 
   function withScriptLock(callback, timeoutMs) {
     var lock = LockService.getScriptLock();
-    lock.waitLock(timeoutMs || 30000);
+    var waitMs = timeoutMs === undefined ? 10000 : timeoutMs;
+    if (!lock.tryLock(waitMs)) {
+      throw UtilService.createError(
+        CRM_CONFIG.ERROR_CODES.SHEET_ERROR,
+        'Another MATCHPOINT CRM operation is still running. Wait a moment, then run setup again.'
+      );
+    }
     try {
       return callback();
     } finally {
@@ -201,14 +268,19 @@ var DbService = (function () {
     sheetExists: sheetExists,
     getSheet: getSheet,
     getHeaders: getHeaders,
+    getHeaderMap: getHeaderMap,
+    validateRequiredHeaders: validateRequiredHeaders,
     readTable: readTable,
     findRowById: findRowById,
     appendRecord: appendRecord,
+    appendRecords: appendRecords,
     updateRecordById: updateRecordById,
     softDeleteRecordById: softDeleteRecordById,
     objectToRow: objectToRow,
     rowToObject: rowToObject,
-    generateId: generateId,
+    hasMeaningfulValue: hasMeaningfulValue_,
+    generateUuid: generateUuid,
+    generateDocumentNumber: generateDocumentNumber,
     clearDataRows: clearDataRows,
     withScriptLock: withScriptLock
   };

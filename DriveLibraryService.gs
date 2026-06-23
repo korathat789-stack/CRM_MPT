@@ -46,7 +46,7 @@ var DriveLibraryService = (function () {
   function getLibraryFiles(user, folderIdOrKey) {
     var library = getLibraryRecord_(folderIdOrKey);
     if (!library) throw UtilService.notFound('Catalogue library');
-    if (UtilService.isBlank(library.FolderId) || String(library.FolderId).indexOf('REPLACE_WITH_') === 0) {
+    if (UtilService.isBlank(library.FolderId)) {
       throw UtilService.createError(
         CRM_CONFIG.ERROR_CODES.DRIVE_ERROR,
         'This catalogue folder is not configured yet. Please update the FolderId in the Catalogues sheet.'

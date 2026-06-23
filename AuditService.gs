@@ -1,30 +1,61 @@
 var AuditService = (function () {
-  function truncate(value) {
-    var text = UtilService.stringifyJson(value);
+  var SECRET_KEYS = /password|hash|salt|token|secret|key|authorization/i;
+
+  function scrub(value) {
+    if (value === null || value === undefined) return value;
+    if (Array.isArray(value)) {
+      return value.map(scrub);
+    }
+    if (typeof value === 'object') {
+      var output = {};
+      Object.keys(value).forEach(function (key) {
+        output[key] = SECRET_KEYS.test(key) ? '[redacted]' : scrub(value[key]);
+      });
+      return output;
+    }
+    return value;
+  }
+
+  function truncateJson(value) {
+    var text = UtilService.stringifyJson(scrub(value || {}));
     return text.length > 45000 ? text.slice(0, 45000) + '...TRUNCATED' : text;
   }
 
-  function logAction(action, entityType, entityId, beforeData, afterData, actorEmail, context) {
+  function resolveActor(actor) {
+    if (actor && typeof actor === 'object') {
+      return {
+        userId: actor.userId || actor.UserID || '',
+        email: actor.email || actor.Email || ''
+      };
+    }
+    var email = UtilService.coerceEmail(actor || AuthService.getCurrentUserEmail());
+    return { userId: '', email: email };
+  }
+
+  function logAction(action, entityType, entityId, beforeData, afterData, actor, context, result, errorMessage) {
     try {
       if (!DbService.sheetExists(CRM_CONFIG.SHEETS.AUDIT_LOGS)) return;
-      DbService.withScriptLock(function () {
-        DbService.appendRecord(CRM_CONFIG.SHEETS.AUDIT_LOGS, {
-          AuditID: DbService.generateId('AUD', CRM_CONFIG.SHEETS.AUDIT_LOGS, 'AuditID'),
-          Timestamp: UtilService.nowIso(),
-          ActorEmail: actorEmail || AuthService.getCurrentUserEmail() || 'unknown',
-          Action: action,
-          EntityType: entityType || '',
-          EntityID: entityId || '',
-          BeforeJson: truncate(beforeData || {}),
-          AfterJson: truncate(afterData || {}),
-          IpOrContext: context || ''
-        });
-      });
+      var resolvedActor = resolveActor(actor);
+      var record = {
+        AuditID: DbService.generateUuid('AUD'),
+        Timestamp: UtilService.nowIso(),
+        UserID: resolvedActor.userId || '',
+        UserEmail: resolvedActor.email || 'unknown',
+        Action: action || '',
+        EntityType: entityType || '',
+        EntityID: entityId || '',
+        PreviousValue: truncateJson(beforeData || {}),
+        NewValue: truncateJson(afterData || {}),
+        RequestID: context || Utilities.getUuid(),
+        Result: result || 'SUCCESS',
+        ErrorMessage: errorMessage || ''
+      };
+      DbService.appendRecord(CRM_CONFIG.SHEETS.AUDIT_LOGS, record);
     } catch (err) {
       try {
         Logger.log('Audit logging failed: ' + (err && err.message ? err.message : err));
       } catch (logErr) {
-        // Ignore audit logging failures.
+        // Audit logging must never block the primary operation.
       }
     }
   }
@@ -41,11 +72,11 @@ var AuditService = (function () {
 
     logs = logs.filter(function (log) {
       if (action && log.Action !== action) return false;
-      if (actorEmail && UtilService.normalize(log.ActorEmail) !== UtilService.normalize(actorEmail)) return false;
+      if (actorEmail && UtilService.normalize(log.UserEmail) !== UtilService.normalize(actorEmail)) return false;
       var timestamp = Date.parse(log.Timestamp || '') || 0;
       if (fromDate && timestamp < fromDate) return false;
       if (toDate && timestamp > toDate) return false;
-      return UtilService.containsText(log, ['AuditID', 'ActorEmail', 'Action', 'EntityType', 'EntityID'], query);
+      return UtilService.containsText(log, ['AuditID', 'UserEmail', 'Action', 'EntityType', 'EntityID', 'Result'], query);
     });
 
     logs.sort(function (a, b) {
