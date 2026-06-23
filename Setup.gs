@@ -1,5 +1,5 @@
 var SetupService = (function () {
-  var VALIDATION_ROW_COUNT = 500;
+  var VALIDATION_ROW_COUNT = 100;
   var SETUP_LOCK_TIMEOUT_MS = 120000;
 
   function hasBootstrappedUsers() {

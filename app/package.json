@@ -1,0 +1,22 @@
+{
+  "name": "matchpoint-crm",
+  "version": "3.0.0",
+  "private": true,
+  "description": "MATCHPOINT CRM — Vue 3 + Supabase + Vite",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "vue": "^3.4.21"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.0.4",
+    "vite": "^5.2.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
